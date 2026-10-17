@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="author" content="yo">
+        <meta name="description" content="Página de prueba para uso de html creando diagramas de Voronoi sin delaunay.">
+        <link src="..\CSS\styles.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.13.2/pixi.min.js"></script>
+        <script src="..\Js\textoFPS.js"></script>
+        <script src="..\Js\simulador_voronoi.js"></script>
+
+        <title> Proyecto Diagramado Voronoi y Falling Sand</title>
+    </head>
+    
+    <body>
+        <header>
+            <h1>Página de prueba para voronoi sin Delaunay</h1>
+        </header>
+        <main>
+            <section>
+
+                <h3>Configuraciones:</h3>
+
+                <p>Tamaño de los muros:</p>
+                <input type="range" min="1" max="10" value="1" id="scaleWall">
+
+                <p>Tamaño de canvas:</p>
+                <input type="range" min="1" max="5" value="2" id="scaleCanvas">
+
+                <button id="reset-canvas">Resetar canvas</button>
+
+                <button id="random-points">Generar puntos random</button>
+
+                <button id="dinamic-points">Alternar Dinamismo</button>
+
+            </section>
+
+            <section>
+                <h3> <abbr title="Frames Por Segundos">FPS: </abbr></h3> <!-- Abreviación de texto -->
+                <h4 id="texto-fps"></h4>
+            </section>
+
+            <section>
+                
+                <div>
+                    <script>
+                        window.addEventListener('DOMContentLoaded', () => {
+                            window.simulador = new SimuladorVoronoi();
+                        })
+                    </script>
+                </div>
+            </section>
+
+
+        </main>
+    </body>
+</html>
