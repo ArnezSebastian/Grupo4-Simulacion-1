@@ -40,10 +40,12 @@ class SimuladorVoronoi {
 
     //Materiales:
     materiales = {
-        nada: 0,
-        muro: 1
+        0: "nada",
+        1: "muro",
+        2: "arena",
+        3: "piedra",
+        4: "agua"
     }
-
 
     //Buffer para recorridos y actualización de color/materiales:
     bufferPixeles;
@@ -116,7 +118,9 @@ class SimuladorVoronoi {
                 x: 0,
                 y: 0
             },
-            pres: false
+            pres: false,
+            areaActual: null,
+            materialActual: this.materiales[0]
         }
 
         //Planteo todas las grillas necesarias:
@@ -144,6 +148,8 @@ class SimuladorVoronoi {
         this.agregarDinamismoSiCorresponde();
 
         this.actualizarDiagramaGeneral();
+
+        this.actualizarAreaYMaterialDelMouseSiCorresponde();
 
     }
 
@@ -266,10 +272,16 @@ class SimuladorVoronoi {
             const g = Math.floor(Math.random() * 200 + 55);
             const b = Math.floor(Math.random() * 200 + 55);
 
+
+            //El material no es un valor entero, pero a pesar de buscarlo de otra manera, no se logra encontrar y devuelve "undefined", se necesita seguir indagando.
+            const indexMaterialActualizado = elegirValorAleatorioEntre(2, Object.keys(this.materiales).length - 1);
+
+
             this.puntos.push({
                 x: x,
                 y: y,
                 color: [r, g, b],
+                materialActual: this.materiales[indexMaterialActualizado],
                 vx: (Math.random() - 0.5) * 3,
                 vy: (Math.random() - 0.5) * 3
             });
@@ -297,9 +309,12 @@ class SimuladorVoronoi {
             //getBoundingClientRect = obtener el rectángulo delimitador del elemento.
             const rect = this.pixiApp.canvas.getBoundingClientRect(); //método que devuelve valores de posición y tamaño de un DOM html.
 
-            this.mouse.position.x = this.convertirCoordenadaXDelMouse(e.clientX, rect);
+            // Calculamos el factor de escala real entre el DOM y la resolución interna del buffer
+            const scaleX = this.canvasWidth / rect.width;
+            const scaleY = this.canvasHeight / rect.height;
 
-            this.mouse.position.y = this.convertirCoordenadaYDelMouse(e.clientY, rect);
+            this.mouse.position.x = this.convertirCoordenadaDelMouseCorrespondiente(e.clientX, rect.left, scaleX);
+            this.mouse.position.y = this.convertirCoordenadaDelMouseCorrespondiente(e.clientY, rect.top, scaleY);
         }
     }
 
@@ -316,33 +331,24 @@ class SimuladorVoronoi {
         }
     }
 
-    convertirCoordenadaXDelMouse(mouseX, rectangle) {
-        return (Math.floor(mouseX - rectangle.left) / this.canvasScaler);
-    }
-
-    convertirCoordenadaYDelMouse(mouseY, rectangle) {
-        return (Math.floor(mouseY - rectangle.top) / this.canvasScaler);
+    convertirCoordenadaDelMouseCorrespondiente(mousePosAxis, rectPos, realScale) { //Función parametrizada de las versiones originales divididas en x e y.
+        return (Math.floor(mousePosAxis - rectPos) * realScale)
     }
 
 
     actualizarDiagramaGeneral() {
         // Actualizo lógicamente los datos (genero dirty flags en todo lo que se necesite):
-        
         this.actualizarDiagramaVoronoi();
         this.actualizarMuros();
 
         // Para luego actualizar el diagrama visible:
-        if (this.textureBuffer) {
-            this.textureBuffer.update();
-        }
-
+        this.actualizarBufferDeTextura();
     }
 
 
 
     actualizarDiagramaVoronoi() {
-        // Actualiza el diagrama de voronoi (canvas) en base a los puntos que sean agregados 
-        // al canvas.
+        // Actualiza el diagrama de voronoi (canvas) en base a los puntos que sean agregados al canvas.
 
         if (!this.puntos || this.puntos.length === 0) return;
 
@@ -359,7 +365,8 @@ class SimuladorVoronoi {
             py[i] = this.puntos[i].y;
         }
 
-        // Primer pasada: Calcular regiones de Voronoi y almacenar el índice del punto más cercano en gridState
+        // Se calculan las regiones de Voronoi y almacenan el índice del punto 
+        // más cercano en el buffer de gridVoronoi:
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 let minDist = Infinity; //número infinito.
@@ -387,29 +394,38 @@ class SimuladorVoronoi {
 
         // Se dibujan las semillas visibles sobre el canvas para identificarlas claramente
         for (let i = 0; i < this.puntos.length; i++) {
-            const p = this.puntos[i];
-            const sx = Math.floor(p.x);
-            const sy = Math.floor(p.y);
-            
-            // Se dibuja un punto central blanco de radio 3 píxeles 
-            for (let dy = -2; dy <= 2; dy++) { //se genera un recorrido en 1d en base a la posición 
-                for (let dx = -2; dx <= 2; dx++) {
-                    this.setearPixel(sx + dx, sy + dy, this.valorRPunto, this.valorGPunto, this.valorBPunto);
-                }
+            const p = this.puntos[i]; //punto de la lista.
+            const sx = Math.floor(p.x); //valor redondeado a entero del punto x.
+            const sy = Math.floor(p.y); //lo mismo para y.
+            const radioPunto = 2; //radio del punto (debe ser un entero positivo).
+
+            // Se dibuja un punto central blanco de 2 píxeles de radio: 
+            this.dibujarPuntoDeRadio_EnPosicion_y_DeColorConValorR_ValorG_ValorB_(radioPunto, sx, sy, this.valorRPunto, this.valorGPunto, this.valorBPunto);
+        }
+    }
+
+    dibujarPuntoDeRadio_EnPosicion_y_DeColorConValorR_ValorG_ValorB_(r, posx, posy, valorR, valorG, valorB) {
+        //Recorrido de dibujo desde el extremo -radio y radio en el eje x e y 
+        // (que será luego seteado para que sea en base al punto):
+        for(let ry = -r; ry <= r; ry++) { 
+            for(let rx = -r; rx <= r; rx++) {
+            this.setearPixel(posx + rx, posy + ry, valorR, valorG, valorB);
             }
         }
     }
 
     actualizarMuros() {
-        //Actualiza el diagrama y las líneas en base a donde se muevan los puntos.
+        //Actualiza las divisiones del  diagrama, la posición y ancho de los muros en base a donde se muevan los puntos: 
 
         if (!this.puntos || this.puntos.length == 0) return;
 
+        //Tomamos el ancho y alto del canvas, y el grosor del muro:
         const w = this.canvasWidth;
         const h = this.canvasHeight;
-        const grosorMuro = Number(this.muroGrosor) || 1;
+        const grosorMuro = Number(this.muroGrosor) || 1; //El valor numérico flotante del grosor del muro del slider (o 1)
+        const radioMuro = Math.floor(grosorMuro/2); 
 
-        // Segunda pasada: Detección de fronteras (bordes entre distintas regiones de Voronoi) para pintar muros
+        // Se detectan las fronteras entre las regiones regiones de Voronoi para pintar muros:
         for (let y = 1; y < h - 1; y++) {
             for (let x = 1; x < w - 1; x++) {
                 const idx = y * w + x;
@@ -421,11 +437,7 @@ class SimuladorVoronoi {
                     currentRegion !== this.gridVoronoi[idx + w]
                 ) {
                     // Pintamos pared gris gruesa usando el material muro
-                    for (let ky = -Math.floor(grosorMuro/2); ky <= Math.floor(grosorMuro/2); ky++) {
-                        for (let kx = -Math.floor(grosorMuro/2); kx <= Math.floor(grosorMuro/2); kx++) {
-                            this.setearPixel(x + kx, y + ky, this.valorRPiedra, this.valorGPiedra, this.valorBPiedra);
-                        }
-                    }
+                    this.dibujarPuntoDeRadio_EnPosicion_y_DeColorConValorR_ValorG_ValorB_(radioMuro, x, y, this.valorRPiedra, this.valorGPiedra, this.valorBPiedra);
                 }
             }
         }
@@ -437,18 +449,25 @@ class SimuladorVoronoi {
         if (this.mouse.position.x >= 0 && this.mouse.position.x < this.canvasWidth &&
             this.mouse.position.y >= 0 && this.mouse.position.y < this.canvasHeight) {
             
-            const rx = Math.floor(Math.random() * 180 + 50);
-            const rg = Math.floor(Math.random() * 180 + 50);
-            const rb = Math.floor(Math.random() * 180 + 50);
+            //Seteamos el color del area en RGB:
+            const rx = Math.floor(Math.random() * 180 + 50); //valor r
+            const rg = Math.floor(Math.random() * 180 + 50); //valor g
+            const rb = Math.floor(Math.random() * 180 + 50); //valor b
 
+            //Y su material (es aleatorio):
+            const indexMaterialActualizado = elegirValorAleatorioEntre(2, Object.keys(this.materiales).length - 1);
+
+            //Añadimos el punto a la lista con todas las propiedades referidas al mismo:
             this.puntos.push({
                 x: this.mouse.position.x, //posicion x del punto
                 y: this.mouse.position.y, //posicion y del punto
                 color: [rx, rg, rb], //color RGB
+                materialActual: this.materiales[indexMaterialActualizado], //material que se guarda en la memoria.
                 vx: (Math.random() - 0.5) * 2,
                 vy: (Math.random() - 0.5) * 2
             });
 
+            //Y actualizamos el buffer visual en base al dirty flag:
             this.actualizarDiagramaVoronoi();
         }
     }
@@ -526,7 +545,7 @@ class SimuladorVoronoi {
     vaciarGrillaDeEstados() {
         for (let y = this.canvasHeight; y > 0; y--) {
             for (let x = 0; x < this.canvasWidth; x++) {
-                this.gridState[y * this.canvasWidth + x] = this.materiales.nada;
+                this.gridState[y * this.canvasWidth + x] = 0;
             }
         }
         
@@ -569,9 +588,9 @@ class SimuladorVoronoi {
 
         //En base al material a cambiar, se actualiza la celda:
         switch(materialACambiar) {
-            case this.materiales.nada:
+            case this.materiales[0]:
                 this.setearPixel(posX, posY, 0, 0, 0);
-            case this.materiales.muro:
+            case this.materiales[1]:
                 this.setearPixel(posX, posY, this.valorRPiedra, this.valorGPiedra, this.valorBPiedra)
                 break;
         }
@@ -582,21 +601,52 @@ class SimuladorVoronoi {
         // Actualiza todas los pixeles para que luego se actualicen (dirty flag).
         for(let x = 0; x < this.canvasWidth; x++) {
             for(let y = 0; y < this.canvasHeight; y++) {
-                this.setearPixel(x, y, this.materiales.nada);
+                this.setearPixel(x, y, 0, 0, 0);
             }
         }
 
         //Luego, las dibuja en el canvas.
+        this.actualizarBufferDeTextura();
+    }
+
+    actualizarBufferDeTextura() {
         if (this.textureBuffer) {
             this.textureBuffer.update();
         }
+    }
+
+    actualizarAreaYMaterialDelMouseSiCorresponde() {
+        //Si supera los límites del canvas, no actualiza (0 hasta uno menos que el ancho para los arrays).
+        if((
+            (this.mouse.position.x < 0 || this.mouse.position.x >= this.canvasWidth) 
+            || 
+            (this.mouse.position.y < 0 || this.mouse.position.y >= this.canvasHeight)
+            )
+            ||
+            (this.puntos.length === 0)
+        ) return;
+
+        //Aún a prueba (funciona sin escalar, al escalar, intermitentemente vuelve a ser undefined)
+        const espacioActualizado = this.gridVoronoi[this.mouse.position.y * this.canvasWidth + this.mouse.position.x];
+
+        // Si es 0 (vacío) o el valor no es válido, salimos de la función:
+        if (espacioActualizado === 0 || espacioActualizado > this.puntos.length || espacioActualizado === undefined) return;
+        
+        //Si el estas parado en el mismo lugar, no hace nada más:
+        if(espacioActualizado == this.mouse.areaActual) return;
+
+        //Sino actualiza su area a la nueva:
+        this.mouse.areaActual = espacioActualizado;
+
+        //En base al area del punto que se encuentre en el area del mouse, es el material del mouse (-1 ya que almacenamos un índice +1 en la grilla para que no de nunca 0)
+        this.mouse.materialActual = this.puntos[espacioActualizado - 1].materialActual;
+
     }
 
 
     escalarCanvas() {
         // Seccion en donde, en base al slider de escala de canvas, actualiza todo el espacio del canvas,
         //tanto lógico como visualmente, sin borrar la información que ya se encontraba en el espacio.
-
         if (!this.pixiApp || !this.spriteDrawer) return;
 
         // Escalado del renderer y del sprite principal sin perder los datos del buffer contiguo
@@ -604,11 +654,9 @@ class SimuladorVoronoi {
             this.canvasWidth * this.canvasScaler,
             this.canvasHeight * this.canvasScaler
         );
-        
 
         //Se escala el espacio físico en donde se está dibujando 
         // (en caso de no escalarlo, lo dibujado permanece del mismo tamaño)
-
         this.spriteDrawer.width = this.canvasWidth * this.canvasScaler;
         this.spriteDrawer.height = this.canvasHeight * this.canvasScaler;
     }
