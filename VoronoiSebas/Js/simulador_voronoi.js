@@ -71,7 +71,12 @@ class SimuladorVoronoi {
     valorGPunto = 255;
     valorBPunto = 255;
 
+    //Booleanos para condicionales:
     dinamismoActivado = false;
+    modoDibujo = false; //Condicional que podría plantearse a través del uso de un botón/tecla de activado/desactivado.
+    //Ese condicional podría servir para "no cambiar" todo el rato cual es el material actual y para intercambiar 
+    // entre un modo "borrador", de ser necesario. (No implementado aún debido a que puede no ser lo más óptimo 
+    // para el sistema implementarlo con un condicional).
 
     constructor () {
         this.initializeDOMBinds();
@@ -180,9 +185,10 @@ class SimuladorVoronoi {
 
     resetearCanvas() {
 
-        //Vacío lo relacionado a los puntos del diagrama de voronoi:
+        //Vacío lo relacionado a los puntos del diagrama de voronoi y al pincel:
         this.eliminarPuntosDelCanvas();
         this.vaciarGrillaDeAreas(); //a chequear porqué no funciona completamente.
+        this.resetearPincel(); // y resetea los valores del pincel.
 
         //Vacío y actualizo el diagrama general.
         this.vaciarGrillaDeEstados();
@@ -193,6 +199,11 @@ class SimuladorVoronoi {
     eliminarPuntosDelCanvas() {
         // Vacía la lista de puntos.
         this.puntos = [];
+    }
+
+    resetearPincel() {
+        this.mouse.areaActual = null;
+        this.mouse.materialActual = this.materiales[0];
     }
 
     actualizarTamanioCanvasConSlider() {
