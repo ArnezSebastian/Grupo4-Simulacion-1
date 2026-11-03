@@ -160,6 +160,15 @@
             }
         }
 
+
+        //Forma de calcular la escala actual del canvas (guardaba datos erroneos al escalar):
+        // Calculamos el factor de escala real entre el DOM y la resolución interna del buffer
+            const scaleX = this.canvasWidth / rect.width;
+            const scaleY = this.canvasHeight / rect.height;
+
+            this.mouse.position.x = this.convertirCoordenadaDelMouseCorrespondiente(e.clientX, rect.left, scaleX);
+            this.mouse.position.y = this.convertirCoordenadaDelMouseCorrespondiente(e.clientY, rect.top, scaleY);
+
     }
 
 */

@@ -18,10 +18,13 @@ class SimuladorVoronoi {
     canvasScaler = 2;
     muroGrosor = 1;
     
-    //Botones y sliders:
+    //Botones:
     btnReset;
     btnRandom;
     btnDinamic;
+    btnDelete;
+
+    //Sliders:
     sliderCanvas;
     sliderPencil;
     sliderMuro;
@@ -73,10 +76,17 @@ class SimuladorVoronoi {
 
     //Booleanos para condicionales:
     dinamismoActivado = false;
-    modoDibujo = false; //Condicional que podría plantearse a través del uso de un botón/tecla de activado/desactivado.
-    //Ese condicional podría servir para "no cambiar" todo el rato cual es el material actual y para intercambiar 
-    // entre un modo "borrador", de ser necesario. (No implementado aún debido a que puede no ser lo más óptimo 
-    // para el sistema implementarlo con un condicional).
+
+    //Valores de configuración para el agregado de puntos de voronoy:
+    //Valor para cantidad máxima de puntos posibles en pantalla.
+    cantPuntosMax = 30;
+    //Valor de radio mínimo entre puntos:
+    distMinimaPuntos = 35;
+
+    //Agregados para interfaz:
+    textoCantPuntosDisponibles;
+    textoMaterialActual;
+    cantPuntosDisponibles = this.cantPuntosMax;
 
     constructor () {
         this.initializeDOMBinds();
@@ -94,6 +104,11 @@ class SimuladorVoronoi {
         this.btnReset = document.getElementById("reset-canvas");
         this.btnRandom = document.getElementById("random-points");
         this.btnDinamic = document.getElementById("dinamic-points");
+        this.btnDelete = document.getElementById("delete-points-mode");
+
+        //Textos referidos a los materiales y a los puntos disponibles.
+        this.textoCantPuntosDisponibles = document.getElementById("text-cant-points");
+        this.textoMaterialActual = document.getElementById("text-actual-mat");
     }
 
     async initPIXI() {
@@ -125,7 +140,8 @@ class SimuladorVoronoi {
             },
             pres: false,
             areaActual: null,
-            materialActual: this.materiales[0]
+            materialActual: this.materiales[0], 
+            modoBorrador: false //Nueva propiedad para borrar puntos en base al area en la que se encuentre el mouse.
         }
 
         //Planteo todas las grillas necesarias:
@@ -148,7 +164,7 @@ class SimuladorVoronoi {
 
     gameLoop(time) {
         
-        this.actualizarTextoFPS();
+        this.actualizarTextos();
 
         this.agregarDinamismoSiCorresponde();
 
@@ -169,6 +185,7 @@ class SimuladorVoronoi {
         this.resetearCanvasAlClickear();
         this.generarPuntosAleatoriamenteAlClickear();
         this.agregarDinamismoAlClickear();
+        this.alternarModoBorradorAlClickear();
     }
 
     agregarInteractividadDeSliders() {
@@ -199,6 +216,9 @@ class SimuladorVoronoi {
     eliminarPuntosDelCanvas() {
         // Vacía la lista de puntos.
         this.puntos = [];
+
+        //Y actualiza la cantidad de puntos disponibles para que sea de nuevo la cantidad máxima:
+        this.cantPuntosDisponibles = this.cantPuntosMax;
     }
 
     resetearPincel() {
@@ -208,7 +228,7 @@ class SimuladorVoronoi {
 
     actualizarTamanioCanvasConSlider() {
         this.sliderCanvas.addEventListener('input', (e) => {
-            this.canvasScaler = e.target.value; 
+            this.canvasScaler = Number(e.target.value);
 
             this.escalarCanvas();
         })
@@ -223,6 +243,12 @@ class SimuladorVoronoi {
     agregarDinamismoAlClickear() {
         this.btnDinamic.addEventListener("click", (e) => {
             this.dinamismoActivado = !this.dinamismoActivado;
+        })
+    }
+
+    alternarModoBorradorAlClickear() {
+        this.btnDelete.addEventListener("click", (e) => {
+            this.mouse.modoBorrador = !this.mouse.modoBorrador;
         })
     }
 
@@ -258,13 +284,9 @@ class SimuladorVoronoi {
 
     generarPuntosAleatoriamenteAlClickear () {
         this.btnRandom.addEventListener("click", (e) => {
-
             this.resetearCanvas();
-
             this.generarPuntosAleatoriamente();
-
             this.actualizarDiagramaVoronoi();
-            
         })
     }
 
@@ -283,11 +305,10 @@ class SimuladorVoronoi {
             const g = Math.floor(Math.random() * 200 + 55);
             const b = Math.floor(Math.random() * 200 + 55);
 
-
             //El material no es un valor entero, pero a pesar de buscarlo de otra manera, no se logra encontrar y devuelve "undefined", se necesita seguir indagando.
             const indexMaterialActualizado = elegirValorAleatorioEntre(2, Object.keys(this.materiales).length - 1);
 
-
+            //Agrega el punto dentro del arreglo:
             this.puntos.push({
                 x: x,
                 y: y,
@@ -299,15 +320,48 @@ class SimuladorVoronoi {
         }
     }
 
+    eliminarPuntoDelAreaActualEnBaseAlMouse() {
+        if(
+            (this.mouse.areaActual == null)
+            ||
+            (this.mouse.areaActual == undefined)
+            ||
+            (this.puntos.length === 0)
+        ) return;
+
+        //Toma el índice en base al area actual menos 1.
+        const indiceActual = this.mouse.areaActual - 1;
+
+        // Validación de seguridad por si el índice está fuera de rango
+        if (indiceActual < 0 || indiceActual >= this.puntos.length) return;
+
+        //Elimina el elemento de ese índice:
+        this.puntos.splice(indiceActual, 1);
+
+        //Actualiza el area a un valor nulo:
+        this.mouse.areaActual = null;
+
+        //Suma 1 a la cantidad actual de puntos disponibles:
+        this.cantPuntosDisponibles += 1;
+
+        if(this.puntos.length >= 1) {
+            //Y vacía la grilla para forzar una re-carga en el siguiente frame, así actualizar el diagrama de forma correcta
+            this.vaciarGrillaDeAreas();
+        } else {
+            this.resetearCanvas()
+        }
+    }
+
     agregarInteractividadAlMouse() {
 
         this.actualizarPosicionDelMouseAlMover();
+
+        this.agregarInteractividadDeMouseAlSalir();
 
         this.agregarInteractividadDeMousePresionado();
         this.agregarInteractividadDeMouseAlSoltar();
 
         /*
-
         //Funciones potencialmente útiles a futuro:
         this.actualizarPosicionDelMouseAlClickear();
         this.actualizarPosicionDelMouseAlSoltar();
@@ -320,19 +374,31 @@ class SimuladorVoronoi {
             //getBoundingClientRect = obtener el rectángulo delimitador del elemento.
             const rect = this.pixiApp.canvas.getBoundingClientRect(); //método que devuelve valores de posición y tamaño de un DOM html.
 
-            // Calculamos el factor de escala real entre el DOM y la resolución interna del buffer
-            const scaleX = this.canvasWidth / rect.width;
-            const scaleY = this.canvasHeight / rect.height;
+            if (rect.width === 0 || rect.height === 0) return;
 
-            this.mouse.position.x = this.convertirCoordenadaDelMouseCorrespondiente(e.clientX, rect.left, scaleX);
-            this.mouse.position.y = this.convertirCoordenadaDelMouseCorrespondiente(e.clientY, rect.top, scaleY);
+            // Obtenemos la posición relativa exacta (proporción de 0 a 1) dentro del canvas renderizado.
+            // Esto elimina por completo cualquier desajuste de escala, CSS o zoom.
+            const relX = (e.clientX - rect.left) / rect.width;
+            const relY = (e.clientY - rect.top) / rect.height;
+
+            // Mapeamos esa proporción directamente a la resolución lógica interna del simulador
+            this.mouse.position.x = this.convertirCoordenadaDelMouseCorrespondiente(relX, this.canvasWidth);
+            this.mouse.position.y = this.convertirCoordenadaDelMouseCorrespondiente(relY, this.canvasHeight);
         }
     }
 
     agregarInteractividadDeMousePresionado() {
         this.pixiApp.canvas.onmousedown = (e) => {
             this.mouse.pres = true;
-            this.dibujarPuntoEnBaseAlMouse();
+
+            //Su accionar depende de la propiedad activada (no está dentro del gameloop
+            // por lo que sólo consultará cuando se clickee):
+            if(this.mouse.modoBorrador == true) {
+                this.eliminarPuntoDelAreaActualEnBaseAlMouse();
+            } else {
+                this.dibujarPuntoEnBaseAlMouse();
+            }
+            
         };
     }
 
@@ -342,10 +408,31 @@ class SimuladorVoronoi {
         }
     }
 
-    convertirCoordenadaDelMouseCorrespondiente(mousePosAxis, rectPos, realScale) { //Función parametrizada de las versiones originales divididas en x e y.
-        return (Math.floor(mousePosAxis - rectPos) * realScale)
+    agregarInteractividadDeMouseAlSalir() {
+        this.pixiApp.canvas.onmouseleave = (e) => {
+            // Invalidamos las coordenadas al salir para que al reingresar no arrastre posiciones viejas.
+            this.mouse.position.x = -1;
+            this.mouse.position.y = -1;
+            this.mouse.pres = false; //y soltamos el click.
+
+            // Además, reseteamos las propiedades del mouse del area actual y material:
+            this.resetearPincel();
+        }
     }
 
+    //Función parametrizada de las versiones originales divididas en x e y:
+
+    /*
+    
+    convertirCoordenadaDelMouseCorrespondiente(mousePosAxis, rectPos, realScale) {
+        return (Math.floor(mousePosAxis - rectPos) * realScale)
+    }
+    
+    */
+
+    convertirCoordenadaDelMouseCorrespondiente(mouseRelPosAxis, realScale) {
+        return (Math.floor(mouseRelPosAxis * realScale));
+    }
 
     actualizarDiagramaGeneral() {
         // Actualizo lógicamente los datos (genero dirty flags en todo lo que se necesite):
@@ -355,8 +442,6 @@ class SimuladorVoronoi {
         // Para luego actualizar el diagrama visible:
         this.actualizarBufferDeTextura();
     }
-
-
 
     actualizarDiagramaVoronoi() {
         // Actualiza el diagrama de voronoi (canvas) en base a los puntos que sean agregados al canvas.
@@ -394,8 +479,8 @@ class SimuladorVoronoi {
                     }
                 }
 
-                const stateIndex = y * w + x;
-                this.gridVoronoi[stateIndex] = closestIndex + 1; // Guardamos el ID del punto (1 a N)
+                const areaIndex = y * w + x; //calculamos el index del area
+                this.gridVoronoi[areaIndex] = closestIndex + 1; // Y guardamos el ID del punto (1 a N, para no confundirlo con 0)
 
                 //Guardamos el valor del color del espacio:
                 const col = this.puntos[closestIndex].color;
@@ -457,8 +542,27 @@ class SimuladorVoronoi {
     dibujarPuntoEnBaseAlMouse () {
         // genera un punto en base a la posición del mouse (usar click izquierdo al soltar).
 
+        //En caso de superar la cantidad máxima, no hace nada.
+        if(this.puntos.length >= this.cantPuntosMax) return;
+
         if (this.mouse.position.x >= 0 && this.mouse.position.x < this.canvasWidth &&
             this.mouse.position.y >= 0 && this.mouse.position.y < this.canvasHeight) {
+
+            // Se valida la distancia mínima en base al cuadrado de la misma (cálculo euclidiano sin raíz cuadrada que consumiría entre 15 a 30 ciclos de memoria)
+            const minDistSq = this.distMinimaPuntos * this.distMinimaPuntos;
+
+            //Por cada punto, calcula la distancia entre el mouse
+            for (let i = 0; i < this.puntos.length; i++) {
+                const p = this.puntos[i];
+                const dx = this.mouse.position.x - p.x;
+                const dy = this.mouse.position.y - p.y;
+                const distSq = dx * dx + dy * dy; //devuelve un area en base a la distancia entre el mouse y cada punto de la lista.
+
+                // Si el punto nuevo está demasiado cerca de uno existente, cancelamos la creación
+                if (distSq < minDistSq) {
+                    return; // Sale de la función sin crear el punto
+                }
+            }
             
             //Seteamos el color del area en RGB:
             const rx = Math.floor(Math.random() * 180 + 50); //valor r
@@ -477,10 +581,28 @@ class SimuladorVoronoi {
                 vx: (Math.random() - 0.5) * 2,
                 vy: (Math.random() - 0.5) * 2
             });
+            
+            //Agregado que muestra la cantidad actual de puntos para agregar.
+            this.cantPuntosDisponibles -= 1;
 
             //Y actualizamos el buffer visual en base al dirty flag:
             this.actualizarDiagramaVoronoi();
         }
+    }
+
+    //Manejo de textos:
+    actualizarTextos() {
+        this.actualizarTextoFPS();
+        this.actualizarTextoCantPuntos();
+        this.actualizarTextoMatActual();
+    }
+
+    actualizarTextoCantPuntos() {
+        this.textoCantPuntosDisponibles.textContent = this.cantPuntosDisponibles;
+    }
+
+    actualizarTextoMatActual() {
+        this.textoMaterialActual.textContent = this.mouse.materialActual;
     }
 
     generarTextoFPS()  {
@@ -492,6 +614,8 @@ class SimuladorVoronoi {
         
         this.textoFPS.tick();
     }
+
+    //Funciones de planteo de grillas y buffers:
 
     plantearBufferDeCanvas() {
         //En este espacio se planteará el diagrama lógico para el dibujado y recorrido en una grilla 1d
@@ -553,6 +677,8 @@ class SimuladorVoronoi {
         this.vaciarGrillaDeAreas();
     }
 
+    //Funciones vaciadoras de buffers:
+
     vaciarGrillaDeEstados() {
         for (let y = this.canvasHeight; y > 0; y--) {
             for (let x = 0; x < this.canvasWidth; x++) {
@@ -571,6 +697,8 @@ class SimuladorVoronoi {
             }
         }
     }
+
+    //Otras funciones:
 
     // Método para cambiar el color de un píxel específico en la memoria (x, y)
     setearPixel(x, y, r, g, b, a = 255) {

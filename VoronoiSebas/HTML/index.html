@@ -27,7 +27,7 @@
                 <p>Tamaño de los muros:</p>
                 <input type="range" min="1" max="10" value="1" id="scaleWall">
 
-                <p>Tamaño de canvas:</p>
+                <p>Escala del canvas:</p>
                 <input type="range" min="1" max="5" value="2" id="scaleCanvas">
 
                 <button id="reset-canvas">Resetar canvas</button>
@@ -36,11 +36,21 @@
 
                 <button id="dinamic-points">Alternar Dinamismo</button>
 
+                <button id="delete-points-mode">Alternar Modo Borrador</button>
+
             </section>
 
             <section>
                 <h3> <abbr title="Frames Por Segundos">FPS: </abbr></h3> <!-- Abreviación de texto -->
                 <h4 id="texto-fps"></h4>
+
+                <h3>Cantidad de puntos disponibles para incluir:</h3>
+                <h4 id="text-cant-points"></h4>
+
+                <h3>Material Actual a Dibujar:</h3>
+                <h4 id="text-actual-mat"></h4>
+
+                <p>Nota: No puedes agregar un punto de voronoi a menos de 40 <abbr title="Pixeles">px</abrr></p>
             </section>
 
             <section>
