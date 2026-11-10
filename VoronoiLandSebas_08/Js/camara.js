@@ -8,7 +8,7 @@ class Camara {
     x = 0;              // esquina superior izquierda de la vista, en celdas del mundo (puede ser decimal)
     y = 0;
     indiceZoom = 4;
-    indiceZoomMin = Camara.NIVELES_ZOOM.indexOf(1);  // evita mostrar más de 800 × 600 celdas en el editor
+    indiceZoomMin = Camara.NIVELES_ZOOM.indexOf(2);  // evita mostrar más de 800 × 600 celdas en el editor
     indiceZoomMax = Camara.NIVELES_ZOOM.length - 1;
     version = 0;        // aumenta cuando cambia lo que se DIBUJA (origen ajustado a píxeles o zoom): es el "dirty flag".
 
@@ -73,7 +73,7 @@ class Camara {
     }
 
     restablecerRangoZoom() {
-        this.indiceZoomMin = Camara.NIVELES_ZOOM.indexOf(1);
+        this.indiceZoomMin = Camara.NIVELES_ZOOM.indexOf(2);
         this.indiceZoomMax = Camara.NIVELES_ZOOM.length - 1;
         this.fijarIndiceZoom(this.indiceZoom);
     }
