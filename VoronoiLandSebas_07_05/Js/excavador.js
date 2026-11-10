@@ -1,0 +1,155 @@
+// Picar: lanza un rayo desde el jugador hasta el mouse y, mientras se mantiene el click,
+// vacía por intervalos un disco alrededor de la primera celda picable del trayecto.
+// También abre las barreras de región: la barrera es SÓLO la línea de celdas entre dos regiones (ver
+// RegionesDelMundo.esBarrera); el espacio vacío de la región vecina no es barrera ni se puede picar.
+// La dureza de cada material sale de la configuración; con dureza 0 (el agua) el material no se puede picar:
+// el rayo pasa de largo y el disco no lo vacía.
+class Excavador {
+    // Último apuntado (lo lee la vista para dibujar la mira). Se reutiliza: no se crean objetos por frame.
+    objetivo = {
+        hayImpacto: false, celdaX: 0, celdaY: 0, puntoX: 0, puntoY: 0,
+        tipoImpacto: MATERIALES.NADA,
+        apuntadoValido: false, origenPantallaX: 0, origenPantallaY: 0,
+        finPantallaX: 0, finPantallaY: 0, rayoVisible: false
+    };
+    celdasExcavadas = 0;
+
+    constructor(mundoCeldas, camara, regiones, config) {
+        this.mundo = mundoCeldas;
+        this.camara = camara;
+        this.regiones = regiones;
+        this.periodoBaseMs = 1000 / config.tasaHz;
+        this.radio = config.radio;
+        this.radioBarrera = config.radioBarrera;
+        this.durezaBarrera = config.durezaBarrera;
+        this.dureza = config.dureza;
+        this.progresoMs = 0;
+
+        // Se crea una sola vez (el DDA la llama por cada celda que recorre).
+        this._esPicable = (x, y) => this._durezaEn(x, y) > 0;
+    }
+
+    actualizar(deltaMs, jugador, intencion) {
+        this._apuntar(jugador, intencion);
+
+        if (!intencion.picar || !this.objetivo.hayImpacto) {
+            this.progresoMs = 0;
+            return;
+        }
+
+        this.progresoMs += deltaMs;
+        for (let mordiscos = 0; mordiscos < 3; mordiscos++) {
+            const dureza = this._durezaEn(this.objetivo.celdaX, this.objetivo.celdaY);
+            const periodo = this.periodoBaseMs * dureza;
+            if (dureza === 0 || this.progresoMs < periodo) return;
+
+            this.progresoMs -= periodo;
+            if (this.objetivo.tipoImpacto === MATERIALES.MURO) {
+                if (!this._excavarBarrera(this.objetivo.celdaX, this.objetivo.celdaY)) {
+                    this.progresoMs = 0;
+                    return;
+                }
+            } else {
+                this._excavarDisco(this.objetivo.celdaX, this.objetivo.celdaY, dureza);
+            }
+            this._apuntar(jugador, intencion);     // la celda ya no está: se apunta a la siguiente
+            if (!this.objetivo.hayImpacto) {
+                this.progresoMs = 0;
+                return;
+            }
+        }
+        this.progresoMs = 0;            // frame muy largo: se descarta el exceso en vez de acumular mordiscos
+    }
+
+    // Recorre con DDA desde el centro del jugador hasta la celda bajo el mouse, sin alcance fijo adicional.
+    _apuntar(jugador, intencion) {
+        const o = this.objetivo;
+        o.apuntadoValido = intencion.mouseValido;
+        o.rayoVisible = intencion.picar && intencion.mouseValido;
+        o.origenPantallaX = this.camara.pantallaXDe(jugador.centroX);
+        o.origenPantallaY = this.camara.pantallaYDe(jugador.centroY);
+        o.finPantallaX = intencion.mouseX;
+        o.finPantallaY = intencion.mouseY;
+        if (!intencion.mouseValido) {
+            o.hayImpacto = false;
+            return;
+        }
+
+        const ox = jugador.centroX;
+        const oy = jugador.centroY;
+        const mouseMundoX = this.camara.mundoXDe(intencion.mouseX);
+        const mouseMundoY = this.camara.mundoYDe(intencion.mouseY);
+        const dx = mouseMundoX - ox;
+        const dy = mouseMundoY - oy;
+        const distancia = Math.hypot(dx, dy);
+        o.puntoX = mouseMundoX;
+        o.puntoY = mouseMundoY;
+        if (distancia === 0) {
+            o.hayImpacto = false;
+            return;
+        }
+
+        const impacto = RayoDDA.lanzar(ox, oy, dx / distancia, dy / distancia, distancia, this._esPicable);
+        if (impacto) {
+            o.hayImpacto = true;
+            o.celdaX = impacto.x;
+            o.celdaY = impacto.y;
+            // Una celda picable que no tiene material (o es agua) sólo puede ser una barrera de región.
+            const material = this.mundo.obtener(impacto.x, impacto.y);
+            o.tipoImpacto = (this.dureza[material] || 0) > 0 ? material : MATERIALES.MURO;
+            o.puntoX = impacto.x + 0.5;
+            o.puntoY = impacto.y + 0.5;
+            o.finPantallaX = this.camara.pantallaXDe(o.puntoX);
+            o.finPantallaY = this.camara.pantallaYDe(o.puntoY);
+        } else {
+            o.hayImpacto = false;
+            o.tipoImpacto = MATERIALES.NADA;
+        }
+    }
+
+    // Abre la línea de borde en un disco: se abren las celdas de borde de AMBOS lados, así no queda ningún
+    // resto de barrera ni de muro dibujado dentro de la apertura.
+    _excavarBarrera(cx, cy) {
+        let huboCambios = false;
+        const r = this.radioBarrera;
+        for (let dy = -r; dy <= r; dy++) {
+            for (let dx = -r; dx <= r; dx++) {
+                if (dx * dx + dy * dy > r * r) continue;
+
+                const x = cx + dx;
+                const y = cy + dy;
+                if (!this.mundo.estaDentro(x, y) || !this.regiones.esBorde(x, y)) continue;
+                if (this.mundo.abrirBarrera(x, y)) {
+                    this.celdasExcavadas++;
+                    huboCambios = true;
+                }
+            }
+        }
+        return huboCambios;
+    }
+
+    // Vacía las celdas del disco que no sean más duras que la que se está picando
+    // (picar arena no rompe de rebote la piedra de al lado).
+    _excavarDisco(cx, cy, durezaMaxima) {
+        const r = this.radio;
+        for (let dy = -r; dy <= r; dy++) {
+            for (let dx = -r; dx <= r; dx++) {
+                if (dx * dx + dy * dy > r * r + 1) continue;
+
+                const dureza = this._durezaEn(cx + dx, cy + dy);
+                if (dureza === 0 || dureza > durezaMaxima) continue;
+                if (this.mundo.excavar(cx + dx, cy + dy)) this.celdasExcavadas++;
+            }
+        }
+    }
+
+    // Dureza de la celda: la de su material (arena, piedra); si no tiene material picable, la de la barrera
+    // cuando es una celda de borde sin abrir, y 0 (no se puede picar) si es espacio vacío o agua.
+    _durezaEn(x, y) {
+        if (!this.mundo.estaDentro(x, y)) return 0;
+
+        const dureza = this.dureza[this.mundo.estado[this.mundo.indiceDe(x, y)]] || 0;
+        if (dureza > 0) return dureza;
+        return this.regiones.esBarrera(x, y) ? this.durezaBarrera : 0;
+    }
+}

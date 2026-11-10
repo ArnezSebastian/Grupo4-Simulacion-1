@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="yo">
+    <meta name="description" content="Página de prueba para uso de html creando diagramas de Voronoi sin delaunay.">
+    <title>Proyecto Diagramado Voronoi y Falling Sand</title>
+
+    <link rel="stylesheet" href="../CSS/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.13.2/pixi.min.js"></script>
+
+    <!-- El orden importa: las clases se definen antes de que SimuladorVoronoi las use. -->
+    <script defer src="../Js/configuracion.js"></script>
+    <script defer src="../Js/funcionesGlobales.js"></script>
+    <script defer src="../Js/textoFPS.js"></script>
+    <script defer src="../Js/camara.js"></script>
+    <script defer src="../Js/mundoCeldas.js"></script>
+    <script defer src="../Js/regionesDelMundo.js"></script>
+    <script defer src="../Js/inicializadorMateriales.js"></script>
+    <script defer src="../Js/simuladorMateriales.js"></script>
+    <script defer src="../Js/mundoVoronoi.js"></script>
+    <script defer src="../Js/rasterizadorVoronoi.js"></script>
+    <script defer src="../Js/jugador.js"></script>
+    <script defer src="../Js/fisicaJugador.js"></script>
+    <script defer src="../Js/rayoDDA.js"></script>
+    <script defer src="../Js/excavador.js"></script>
+    <script defer src="../Js/generadorSpawn.js"></script>
+    <script defer src="../Js/vistaJugador.js"></script>
+    <script defer src="../Js/sesionJuego.js"></script>
+    <script defer src="../Js/entradaUsuario.js"></script>
+    <script defer src="../Js/hud.js"></script>
+    <script defer src="../Js/pantallaInicio.js"></script>
+    <script defer src="../Js/simulador_voronoi.js"></script>
+</head>
+
+<body>
+    <header class="barra-superior">
+        <h1>Voronoi + Falling Sand</h1>
+        <p class="subtitulo">
+            Mundo de <b id="hud-mundo-titulo">—</b>
+            <abbr title="Cada celda es una unidad lógica del mundo (un píxel de arena a zoom ×1)">celdas</abbr>
+            · cámara de <b id="hud-vista-titulo">—</b>
+        </p>
+    </header>
+
+    <main class="escritorio">
+        <aside class="panel" aria-label="Controles y estado">
+
+            <details class="grupo" open>
+                <summary>Modo</summary>
+                <div class="grupo-cuerpo">
+                    <button type="button" id="btn-modo-juego" class="solo-editor">Jugar</button>
+                    <button type="button" id="btn-modo-editor" class="solo-juego">Volver al editor</button>
+                    <ul class="atajos solo-juego">
+                        <li><kbd>A</kbd> <kbd>D</kbd> mover</li>
+                        <li><kbd>W</kbd> <kbd>S</kbd> mirar arriba / abajo</li>
+                        <li><kbd>Espacio</kbd> saltar</li>
+                        <li><kbd>Click</kbd> mantenido: excavar barreras, agua y materiales</li>
+                    </ul>
+                </div>
+            </details>
+
+            <details class="grupo" open>
+                <summary>Herramientas</summary>
+                <div class="grupo-cuerpo">
+                    <button type="button" id="delete-points-mode" class="solo-editor" aria-pressed="false">Modo borrador <kbd>B</kbd></button>
+                    <button type="button" id="dinamic-points" class="solo-editor" aria-pressed="false">Alternar dinamismo</button>
+                    <button type="button" id="random-points" class="solo-editor">Generar puntos random</button>
+                    <button type="button" id="reset-canvas" class="solo-editor">Resetear canvas</button>
+
+                    <label for="scaleWall">
+                        Grosor de los muros: <output id="valor-muro">5</output>
+                        <abbr title="Píxeles de pantalla">px</abbr>
+                    </label>
+                    <input type="range" min="5" max="10" value="5" id="scaleWall">
+
+                    <p class="nota solo-editor">
+                        Un punto nuevo no puede quedar a menos de <span id="hud-dist-min">35</span>
+                        <abbr title="Celdas del mundo">celdas</abbr> de otro.
+                    </p>
+                </div>
+            </details>
+
+            <details class="grupo" open>
+                <summary>Cámara</summary>
+                <div class="grupo-cuerpo">
+                    <label for="zoom-slider">Zoom: <output id="valor-zoom">×8</output></label>
+                    <input type="range" min="0" max="8" value="8" step="1" id="zoom-slider">
+                    <button type="button" id="center-camera">Centrar cámara <kbd>0</kbd></button>
+                    <ul class="atajos solo-editor">
+                        <li><kbd>Rueda</kbd> zoom hacia el cursor</li>
+                        <li><kbd>Botón central</kbd> / <kbd>Derecho</kbd> / <kbd>Espacio</kbd>+arrastrar: mover</li>
+                        <li><kbd>W A S D</kbd> o flechas: mover</li>
+                        <li><kbd>+</kbd> <kbd>−</kbd> zoom · <kbd>B</kbd> borrador</li>
+                    </ul>
+                    <ul class="atajos solo-juego">
+                        <li><kbd>Rueda</kbd> / <kbd>+</kbd> <kbd>−</kbd> zoom (×4 a ×8)</li>
+                        <li>La cámara sigue al jugador</li>
+                    </ul>
+                </div>
+            </details>
+
+            <details class="grupo" open>
+                <summary>Estado</summary>
+                <dl class="datos">
+                    <dt><abbr title="Tiempo que tardó el último recálculo de las regiones de Voronoi">Voronoi</abbr></dt>
+                    <dd id="hud-voronoi">—</dd>
+                    <dt><abbr title="Tiempo de pintar colores, partículas, muros y semillas">Composición</abbr></dt>
+                    <dd id="hud-composicion">—</dd>
+                    <dt><abbr title="Tiempo entre un cuadro y el siguiente">Frame</abbr></dt>
+                    <dd id="hud-frame">—</dd>
+                    <dt>Mundo</dt>
+                    <dd id="hud-mundo">—</dd>
+                    <dt>Vista</dt>
+                    <dd id="hud-vista">—</dd>
+                    <dt>Cámara (x, y)</dt>
+                    <dd id="hud-camara">—</dd>
+                    <dt>Puntos usados</dt>
+                    <dd id="text-cant-points">—</dd>
+                    <dt>Celdas con material</dt>
+                    <dd id="hud-celdas">—</dd>
+                    <dt>Dinamismo</dt>
+                    <dd id="hud-dinamismo">—</dd>
+                    <dt>Rebotes</dt>
+                    <dd id="hud-rebotes">—</dd>
+                    <dt>Jugador (x, y)</dt>
+                    <dd id="hud-jugador">—</dd>
+                    <dt><abbr title="Tiempo (promedio) de la física del jugador por frame">Física jugador</abbr></dt>
+                    <dd id="hud-fisica">—</dd>
+                    <dt><abbr title="Tiempo (promedio) de actualizar la arena y el agua por frame">Simulación</abbr></dt>
+                    <dd id="hud-simulacion">—</dd>
+                    <dt><abbr title="Bloques de 32×32 celdas procesados en el último frame">Bloques/frame</abbr></dt>
+                    <dd id="hud-bloques">—</dd>
+                </dl>
+            </details>
+        </aside>
+
+        <section class="visor" aria-label="Simulador">
+            <!-- El canvas de Pixi se inserta acá al iniciar (primer hijo). Todo lo demás es HUD superpuesto. -->
+            <div class="lienzo" id="lienzo" data-modo="dibujar">
+                <div class="hud-chips">
+                    <span class="chip"><abbr title="Cuadros por segundo">FPS</abbr> <b id="texto-fps">—</b></span>
+                    <span class="chip">Zoom <b id="hud-zoom">—</b></span>
+                    <span class="chip">Cursor <b id="hud-pos">—</b></span>
+                    <span class="chip">Material <b id="text-actual-mat">—</b></span>
+                    <span class="chip chip-modo">Modo <b id="hud-modo">Dibujar</b></span>
+                </div>
+
+                <div class="pantalla-inicio" id="pantalla-inicio">
+                    <div class="inicio-caja">
+                        <h2>Voronoi + Falling Sand</h2>
+                        <p>Un mundo de regiones de Voronoi llenas de arena, piedra y agua. Cavá y explorá.</p>
+                        <button type="button" id="btn-jugar" class="boton-jugar">Jugar</button>
+                        <button type="button" id="btn-editor" class="boton-secundario">Abrir el editor</button>
+                        <p class="inicio-mensaje" id="inicio-mensaje"></p>
+                        <ul class="atajos">
+                            <li><kbd>A</kbd> <kbd>D</kbd> mover · <kbd>W</kbd> <kbd>S</kbd> mirar arriba / abajo</li>
+                            <li><kbd>Espacio</kbd> saltar · <kbd>Click</kbd> mantenido: excavar hacia el mouse</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <canvas id="minimapa" class="minimapa" width="160" height="160" title="Minimapa: click para mover la cámara"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // El simulador recién se crea al elegir un modo en la pantalla de inicio (botón "Jugar").
+        window.addEventListener('DOMContentLoaded', () => {
+            new PantallaInicio(async (modo) => {
+                window.simulador = new SimuladorVoronoi();
+                await window.simulador.listo;
+                await window.simulador.cambiarModo(modo);
+            });
+        });
+    </script>
+</body>
+
+</html>
