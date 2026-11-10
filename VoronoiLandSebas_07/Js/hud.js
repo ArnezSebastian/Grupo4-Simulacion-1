@@ -15,7 +15,11 @@ class HUD {
         puntos: "text-cant-points",
         celdas: "hud-celdas",
         dinamismo: "hud-dinamismo",
-        rebotes: "hud-rebotes"
+        rebotes: "hud-rebotes",
+        fisica: "hud-fisica",
+        simulacion: "hud-simulacion",
+        bloques: "hud-bloques",
+        jugador: "hud-jugador"
     };
 
     constructor(config, camara, mundoVoronoi, alClickearMinimapa) {
@@ -28,6 +32,7 @@ class HUD {
         this.cache = {};                        // último texto escrito: evita tocar el DOM si no cambió
         this.versionCamaraDibujada = -1;
         this.versionPuntosDibujada = -1;
+        this.jugadorDibujado = "";              // posición del jugador en el minimapa (en píxeles del minimapa)
 
         this._enlazarElementos();
         this._escribirDatosEstaticos();
@@ -70,6 +75,12 @@ class HUD {
         this.sliderZoom.max = Camara.NIVELES_ZOOM.length - 1;
     }
 
+    // Ajusta el slider de zoom al rango que permite la cámara (en juego sólo ×4 a ×8).
+    configurarRangoZoom() {
+        this.sliderZoom.min = this.camara.indiceZoomMin;
+        this.sliderZoom.max = this.camara.indiceZoomMax;
+    }
+
     _escribirPorId(id, texto) {
         const el = document.getElementById(id);
         if (el) el.textContent = texto;
@@ -99,7 +110,7 @@ class HUD {
 
         this._escribir("posicion", s.mundoX === null ? "—" : `${s.mundoX}, ${s.mundoY}`);
         this._escribir("material", s.materialNombre);
-        this._escribir("modo", s.borrador ? "Borrar" : "Dibujar");
+        this._escribir("modo", s.modo === MODOS.JUEGO ? "Juego" : s.borrador ? "Borrar" : "Dibujar");
 
         this._escribir("zoom", `×${s.zoom}`);
         this._escribir("camara", `${Math.round(s.camX)}, ${Math.round(s.camY)}`);
@@ -109,6 +120,12 @@ class HUD {
         this._escribir("celdas", String(s.celdasOcupadas));
         this._escribir("dinamismo", s.dinamismo ? "Activado" : "Desactivado");
         this._escribir("rebotes", String(s.rebotes));
+
+        // Medición de rendimiento: la física sólo existe mientras se juega.
+        this._escribir("fisica", s.fisicaMs === null ? "—" : `${s.fisicaMs.toFixed(3)} ms`);
+        this._escribir("simulacion", s.simulacionPausada ? "en pausa" : `${s.simulacionMs.toFixed(2)} ms`);
+        this._escribir("bloques", s.simulacionPausada ? "—" : `${s.bloquesProcesados} (+${s.bloquesEnCola} en cola)`);
+        this._escribir("jugador", s.jugadorX === null ? "—" : `${Math.round(s.jugadorX)}, ${Math.round(s.jugadorY)}`);
     }
 
     // Refleja en la interfaz los estados que también pueden cambiar con atajos o la rueda del mouse.
@@ -118,7 +135,7 @@ class HUD {
 
         this._marcarBoton(this.btnBorrador, s.borrador);
         this._marcarBoton(this.btnDinamismo, s.dinamismo);
-        this.visor.dataset.modo = s.borrador ? "borrar" : "dibujar";
+        this.visor.dataset.modo = s.modo === MODOS.JUEGO ? "juego" : s.borrador ? "borrar" : "dibujar";
     }
 
     _marcarBoton(boton, activo) {
@@ -129,14 +146,18 @@ class HUD {
     // --- Minimapa (sólo semillas y rectángulo de la cámara: barato, no re-calcula el Voronoi) ---
 
     _actualizarMinimapa(s) {
-        if (s.versionCamara === this.versionCamaraDibujada && s.versionPuntos === this.versionPuntosDibujada) return;
-        this.versionCamaraDibujada = s.versionCamara;
-        this.versionPuntosDibujada = s.versionPuntos;
-
-        const ctx = this.ctxMinimapa;
         const w = this.minimapa.width, h = this.minimapa.height;
         const ex = w / this.config.mundo.ancho;
         const ey = h / this.config.mundo.alto;
+
+        const jugador = s.jugadorX === null ? "" : `${Math.round(s.jugadorX * ex)},${Math.round(s.jugadorY * ey)}`;
+        if (s.versionCamara === this.versionCamaraDibujada && s.versionPuntos === this.versionPuntosDibujada
+            && jugador === this.jugadorDibujado) return;
+        this.versionCamaraDibujada = s.versionCamara;
+        this.versionPuntosDibujada = s.versionPuntos;
+        this.jugadorDibujado = jugador;
+
+        const ctx = this.ctxMinimapa;
 
         ctx.fillStyle = "#0b0b10";
         ctx.fillRect(0, 0, w, h);
@@ -144,6 +165,11 @@ class HUD {
         for (const p of this.mundoVoronoi.puntos) {
             ctx.fillStyle = `rgb(${p.color[0]},${p.color[1]},${p.color[2]})`;
             ctx.fillRect(p.x * ex - 1, p.y * ey - 1, 3, 3);
+        }
+
+        if (s.jugadorX !== null) {
+            ctx.fillStyle = "#ffd23f";
+            ctx.fillRect(s.jugadorX * ex - 2, s.jugadorY * ey - 2, 4, 4);
         }
 
         ctx.strokeStyle = "#ffffff";

@@ -109,6 +109,8 @@ output { color: var(--texto); font-weight: 600; }
 .lienzo {
     position: relative;
     width: fit-content;
+    min-width: calc(var(--canvas-ancho, 800px) + 2px);      /* antes de iniciar todavía no hay canvas */
+    min-height: calc(var(--canvas-alto, 600px) + 2px);
     border: 1px solid var(--borde);
     border-radius: var(--radio);
     overflow: hidden;
@@ -136,6 +138,8 @@ output { color: var(--texto); font-weight: 600; }
     white-space: nowrap;
 }
 .chip b { color: var(--texto); font-variant-numeric: tabular-nums; }
+.lienzo[data-modo="juego"] .chip-modo { background: rgba(30, 90, 60, .8); }
+.lienzo[data-modo="juego"] .chip-modo b { color: #c8f5dc; }
 .lienzo[data-modo="borrar"] .chip-modo { background: rgba(120, 30, 45, .8); }
 .lienzo[data-modo="borrar"] .chip-modo b { color: #ffd0d6; }
 
@@ -149,6 +153,50 @@ output { color: var(--texto); font-weight: 600; }
     cursor: pointer;
 }
 .minimapa:hover { opacity: 1; }
+
+/* ---------- Modos ---------- */
+/* Lo propio del editor se oculta al jugar y viceversa (body[data-modo] lo pone el simulador). */
+body[data-modo="juego"] .solo-editor,
+body:not([data-modo="juego"]) .solo-juego { display: none; }
+
+/* Antes de iniciar y durante la precarga inicial, el panel no hace nada: se atenúa. */
+body[data-estado="inicio"] .panel { opacity: .45; pointer-events: none; }
+
+/* ---------- Pantalla de inicio ---------- */
+.pantalla-inicio {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    line-height: 1.45;
+    background: radial-gradient(ellipse at 50% 40%, rgba(110, 168, 255, .12), transparent 60%), rgba(8, 9, 13, .94);
+}
+.pantalla-inicio[hidden] { display: none; }
+.inicio-caja {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: 420px;
+    padding: 24px;
+    text-align: center;
+}
+.inicio-caja h2 { margin: 0; font-size: 26px; }
+.inicio-caja p { margin: 0; color: var(--texto-suave); }
+.boton-jugar {
+    min-width: 200px;
+    padding: 12px 28px;
+    border-color: var(--acento);
+    background: #22304d;
+    font-size: 18px;
+    font-weight: 600;
+}
+.boton-jugar:hover { background: #2c3f66; }
+.boton-secundario { color: var(--texto-suave); font-size: 13px; }
+button:disabled { opacity: .55; cursor: progress; }
+.inicio-mensaje { min-height: 1.45em; font-size: 13px; }
+.inicio-caja .atajos { padding-left: 0; list-style: none; }
 
 /* ---------- Pantallas chicas: el panel pasa arriba ---------- */
 @media (max-width: 1150px) {

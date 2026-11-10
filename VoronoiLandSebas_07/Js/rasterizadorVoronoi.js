@@ -6,7 +6,8 @@
 // Se arma la envolvente una vez por fila (O(N)) y luego se recorren los píxeles (O(ancho)).
 // Costo por frame: alto * (N + ancho)   en vez de   ancho * alto * N   de la versión por fuerza bruta.
 class RasterizadorVoronoi {
-    constructor(camara, mundoVoronoi, mundoCeldas, config) {
+    constructor(camara, mundoVoronoi, mundoCeldas, config, inicializador) {
+        this.inicializador = inicializador;     // InicializadorMateriales: decide qué hay en las celdas recién vistas
         this.camara = camara;
         this.mundoVoronoi = mundoVoronoi;
         this.mundoCeldas = mundoCeldas;
@@ -49,7 +50,12 @@ class RasterizadorVoronoi {
 
         this.mediciones = { voronoiMs: 0, composicionMs: 0 };
         this.ultimas = { camara: -1, puntos: -1, celdas: -1, grosor: -1 };
-        this.versionZonaInicializada = { camara: -1, celdas: -1 };
+
+        // Descripción del espacio de pantalla que se le pasa al inicializador (se reutiliza: sin objetos nuevos por frame).
+        this.vista = {
+            ancho: this.ancho, alto: this.alto, regiones: this.regiones,
+            filasY: this.filasY, columnasX: this.columnasX, colIni: 0, colFin: -1
+        };
     }
 
     // Dirty flag: sólo se redibuja si cambió algo que afecte a la imagen.
@@ -66,7 +72,9 @@ class RasterizadorVoronoi {
         this._prepararSemillas();
         this._prepararEjesDeVista();
         this._calcularRegiones();
-        this._inicializarMaterialesVisibles();
+        this.vista.colIni = this.colIni;
+        this.vista.colFin = this.colFin;
+        this.inicializador.inicializarVista(this.vista, this.camara.version);
 
         const t1 = performance.now();
 
@@ -231,94 +239,6 @@ class RasterizadorVoronoi {
         const { regiones, pixeles32, paleta32 } = this;
         const total = regiones.length;
         for (let i = 0; i < total; i++) pixeles32[i] = paleta32[regiones[i]];
-    }
-
-    _inicializarMaterialesVisibles() {
-        if (this.cantSemillas === 0) return;
-
-        const celdas = this.mundoCeldas;
-        const puntos = this.mundoVoronoi.puntos;
-        const { ancho, alto, regiones, filasY, columnasX } = this;
-        const porcentaje = this.config.materiales.porcentajeLlenado;
-        const regionesPendientes = this.mundoVoronoi.regionesPendientesInicializacion;
-        const regionesAgregadas = this.mundoVoronoi.regionesAgregadasRecientemente;
-        const areaNecesitaInicializacion = this.versionZonaInicializada.camara !== this.camara.version
-            || this.versionZonaInicializada.celdas !== celdas.versionInicializacion;
-        if (!areaNecesitaInicializacion && regionesAgregadas.size === 0) return;
-
-        const soloRegionesNuevas = regionesAgregadas.size > 0 && !areaNecesitaInicializacion;
-        const regionesParaInicializar = soloRegionesNuevas ? regionesAgregadas : regionesPendientes;
-
-        let huboCambios = false;
-        const regionesAfectadas = new Set();
-        let ultimaFilaMundo = NaN;
-        for (let y = 0; y < alto; y++) {
-            const wy = filasY[y];
-            if (wy === ultimaFilaMundo) continue;
-            ultimaFilaMundo = wy;
-            if (wy < 0 || wy >= celdas.alto) continue;
-
-            const base = wy * celdas.ancho;
-            const off = y * ancho;
-            let ultimaColumnaMundo = NaN;
-            for (let x = this.colIni; x <= this.colFin; x++) {
-                const wx = columnasX[x];
-                if (wx === ultimaColumnaMundo) continue;
-                ultimaColumnaMundo = wx;
-                const indice = base + wx;
-                const regionId = regiones[off + x];
-
-                if (soloRegionesNuevas && !regionesParaInicializar.has(regionId)) continue;
-
-                if (regionesParaInicializar.has(regionId)) {
-                    if (celdas.obtenerRegionIndice(indice) === regionId) continue;
-
-                    const regionAnterior = celdas.obtenerRegionIndice(indice);
-                    const materialAnterior = celdas.estado[indice];
-                    celdas.inicializarIndice(indice, MATERIALES.NADA);
-                    celdas.marcarIndiceInicializado(indice);
-                    celdas.fijarRegionIndice(indice, regionId);
-                    if (regionAnterior >= 0) regionesAfectadas.add(regionAnterior);
-                    regionesAfectadas.add(regionId);
-                    huboCambios = true;
-                    const material = puntos[regionId - 1].materialId;
-                    if (materialAnterior !== MATERIALES.NADA) {
-                        celdas._escribirIndice(indice, material);
-                        celdas.activarIndice(indice);
-                    } else if (regionId > 0
-                        && (celdas.particulasPorRegion.get(regionId) || 0)
-                            < Math.floor((celdas.celdasPorRegion.get(regionId) || 0) * porcentaje)
-                        && Math.random() < porcentaje) {
-                        celdas._escribirIndice(indice, material);
-                        celdas.activarIndice(indice);
-                    }
-                    continue;
-                }
-
-                if (celdas.inicializarIndice(indice, MATERIALES.NADA)) {
-                    celdas.fijarRegionIndice(indice, regionId);
-                    huboCambios = true;
-                    if (regionId === 0) continue;
-
-                    const material = puntos[regionId - 1].materialId;
-                    regionesAfectadas.add(regionId);
-                    if ((celdas.particulasPorRegion.get(regionId) || 0)
-                        < Math.floor((celdas.celdasPorRegion.get(regionId) || 0) * porcentaje)
-                        && Math.random() < porcentaje) {
-                        celdas._escribirIndice(indice, material);
-                        celdas.activarIndice(indice);
-                    }
-                }
-            }
-        }
-
-        if (huboCambios) celdas.marcarModificado();
-        if (regionesParaInicializar.size > 0 && regionesAfectadas.size > 0) {
-            celdas.limitarOcupacionPorRegion(regionesAfectadas, porcentaje);
-        }
-        regionesAgregadas.clear();
-        this.versionZonaInicializada.camara = this.camara.version;
-        this.versionZonaInicializada.celdas = celdas.versionInicializacion;
     }
 
     // Dibuja encima las celdas con material (falling sand). Sólo recorre lo visible.

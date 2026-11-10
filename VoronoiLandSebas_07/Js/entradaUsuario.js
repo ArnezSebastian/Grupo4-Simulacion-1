@@ -1,8 +1,36 @@
 // Traduce eventos del navegador (mouse, rueda, teclado) en acciones de alto nivel.
 // Mueve la cámara directamente (pan/zoom) y avisa al simulador de lo demás mediante callbacks.
+// Qué hace cada tecla depende del MODO (editor / juego): ver MAPA_ACCIONES.
 class EntradaUsuario {
+    // Mapa de acciones por modo: acción -> teclas (event.code) que la disparan.
+    static MAPA_ACCIONES = Object.freeze({
+        [MODOS.EDITOR]: Object.freeze({
+            camaraIzquierda: ["KeyA", "ArrowLeft"],
+            camaraDerecha: ["KeyD", "ArrowRight"],
+            camaraArriba: ["KeyW", "ArrowUp"],
+            camaraAbajo: ["KeyS", "ArrowDown"]
+        }),
+        [MODOS.JUEGO]: Object.freeze({
+            moverIzquierda: ["KeyA", "ArrowLeft"],
+            moverDerecha: ["KeyD", "ArrowRight"],
+            mirarArriba: ["KeyW", "ArrowUp"],
+            mirarAbajo: ["KeyS", "ArrowDown"],
+            saltar: ["Space"]
+        })
+    });
+
+    modo = MODOS.EDITOR;
+
     // Estado del mouse en píxeles del canvas (no del mundo: la conversión la hace la cámara).
     mouse = { pantallaX: -1, pantallaY: -1, dentro: false };
+
+    botonIzquierdoPresionado = false;   // en juego, mantenerlo = picar
+
+    // Intención del jugador en este frame (se reutiliza el mismo objeto: nada de basura por frame).
+    intencion = {
+        mover: 0, mirarVertical: 0, saltar: false, picar: false,
+        mouseX: -1, mouseY: -1, mouseValido: false
+    };
 
     teclas = new Set();
     espacioPresionado = false;
@@ -25,12 +53,52 @@ class EntradaUsuario {
         this._registrarTeclado();
     }
 
-    // Llamar en cada frame: mueve la cámara con WASD / flechas.
+    // Cambia de modo: se sueltan teclas y botones para que no queden "pegados" de un modo al otro.
+    cambiarModo(modo) {
+        this.modo = modo;
+        this.teclas.clear();
+        this.espacioPresionado = false;
+        this.botonIzquierdoPresionado = false;
+        this._terminarArrastre();
+        if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    }
+
+    accionActiva(nombre) {
+        const codigos = EntradaUsuario.MAPA_ACCIONES[this.modo][nombre];
+        if (!codigos) return false;
+        for (let i = 0; i < codigos.length; i++) {
+            if (this.teclas.has(codigos[i])) return true;
+        }
+        return false;
+    }
+
+    // Modo juego: traduce teclas y mouse a la intención del personaje.
+    leerIntencionJugador() {
+        const it = this.intencion;
+        it.mouseX = this.mouse.pantallaX;
+        it.mouseY = this.mouse.pantallaY;
+        it.mouseValido = this.mouse.dentro;
+        if (this.modo !== MODOS.JUEGO) {
+            it.mover = 0;
+            it.mirarVertical = 0;
+            it.saltar = false;
+            it.picar = false;
+            return it;
+        }
+
+        it.mover = (this.accionActiva("moverDerecha") ? 1 : 0) - (this.accionActiva("moverIzquierda") ? 1 : 0);
+        it.mirarVertical = (this.accionActiva("mirarAbajo") ? 1 : 0) - (this.accionActiva("mirarArriba") ? 1 : 0);
+        it.saltar = this.accionActiva("saltar");
+        it.picar = this.botonIzquierdoPresionado;
+        return it;
+    }
+
+    // Modo editor, una vez por frame: mueve la cámara con WASD / flechas.
     aplicarTeclado(deltaMs) {
-        const dx = (this.teclas.has("KeyD") || this.teclas.has("ArrowRight") ? 1 : 0)
-                 - (this.teclas.has("KeyA") || this.teclas.has("ArrowLeft") ? 1 : 0);
-        const dy = (this.teclas.has("KeyS") || this.teclas.has("ArrowDown") ? 1 : 0)
-                 - (this.teclas.has("KeyW") || this.teclas.has("ArrowUp") ? 1 : 0);
+        if (this.modo !== MODOS.EDITOR) return;
+
+        const dx = (this.accionActiva("camaraDerecha") ? 1 : 0) - (this.accionActiva("camaraIzquierda") ? 1 : 0);
+        const dy = (this.accionActiva("camaraAbajo") ? 1 : 0) - (this.accionActiva("camaraArriba") ? 1 : 0);
         if (dx === 0 && dy === 0) return;
 
         const paso = this.velocidadTeclado * deltaMs / 1000;
@@ -52,6 +120,13 @@ class EntradaUsuario {
             if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
             this._actualizarPosicion(e);
 
+            if (this.modo === MODOS.JUEGO) {
+                // En juego no hay pan de cámara: el click izquierdo mantenido pica.
+                if (e.button === 0) this.botonIzquierdoPresionado = true;
+                else e.preventDefault();
+                return;
+            }
+
             const esPan = e.button === 1 || e.button === 2 || (e.button === 0 && this.espacioPresionado);
             if (esPan) {
                 e.preventDefault();
@@ -63,7 +138,10 @@ class EntradaUsuario {
 
         // Arrastre y soltar en window: no se "pega" si el mouse sale del canvas mientras se arrastra.
         window.addEventListener("mousemove", (e) => this._arrastrar(e));
-        window.addEventListener("mouseup", () => this._terminarArrastre());
+        window.addEventListener("mouseup", (e) => {
+            if (e.button === 0) this.botonIzquierdoPresionado = false;
+            this._terminarArrastre();
+        });
         this.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
     }
 
@@ -125,23 +203,39 @@ class EntradaUsuario {
         window.addEventListener("keydown", (e) => {
             if (e.target.closest("input, textarea, select")) return;    // no pelear con los sliders
 
-            if (e.code === "Space" && !e.target.closest("button")) {
-                this.espacioPresionado = true;
-                e.preventDefault();
-                return;
+            if (e.code === "Space") {
+                if (this.modo === MODOS.JUEGO) {
+                    // En juego Espacio es SALTAR (aunque haya un botón con el foco: no debe "apretarlo").
+                    e.preventDefault();
+                    this.teclas.add("Space");
+                    return;
+                }
+                if (!e.target.closest("button")) {
+                    this.espacioPresionado = true;      // editor: Espacio + arrastrar = pan
+                    e.preventDefault();
+                    return;
+                }
             }
+
+            // En juego las flechas no deben scrollear la página.
+            if (this.modo === MODOS.JUEGO && e.code.startsWith("Arrow")) e.preventDefault();
+
             this.teclas.add(e.code);
             this._atajo(e);
         });
 
         window.addEventListener("keyup", (e) => {
-            if (e.code === "Space") this.espacioPresionado = false;
+            if (e.code === "Space") {
+                this.espacioPresionado = false;
+                if (this.modo === MODOS.JUEGO) e.preventDefault();
+            }
             this.teclas.delete(e.code);
         });
 
         window.addEventListener("blur", () => {
             this.teclas.clear();
             this.espacioPresionado = false;
+            this.botonIzquierdoPresionado = false;
             this._terminarArrastre();
         });
     }
@@ -155,7 +249,7 @@ class EntradaUsuario {
             case "Minus":
             case "NumpadSubtract": this.camara.cambiarZoom(-1); break;
             case "Digit0": this.acciones.alCentrar(); break;
-            case "KeyB": this.acciones.alAlternarBorrador(); break;
+            case "KeyB": if (this.modo === MODOS.EDITOR) this.acciones.alAlternarBorrador(); break;
         }
     }
 }
