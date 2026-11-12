@@ -1,0 +1,480 @@
+/* ---------- Variables y base ---------- */
+:root {
+    --fondo: #0e0f14;
+    --panel: #171923;
+    --panel-2: #1f2230;
+    --borde: #2b2f40;
+    --texto: #e6e8f0;
+    --texto-suave: #9aa1b5;
+    --acento: #6ea8ff;
+    --peligro: #ff6b6b;
+    --radio: 10px;
+    --ancho-panel: 300px;
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; min-height: 100%; }
+
+body {
+    background: var(--fondo);
+    color: var(--texto);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+abbr[title] { text-decoration: underline dotted var(--texto-suave); cursor: help; }
+
+kbd {
+    padding: 0 5px;
+    border: 1px solid var(--borde);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: var(--panel-2);
+    font: 11px ui-monospace, Consolas, monospace;
+}
+
+/* ---------- Barra superior ---------- */
+.barra-superior {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--borde);
+    background: var(--panel);
+}
+.barra-superior h1 { margin: 0; font-size: 18px; }
+.subtitulo { margin: 0; color: var(--texto-suave); }
+
+/* ---------- Layout ---------- */
+.escritorio {
+    display: grid;
+    grid-template-columns: var(--ancho-panel) 1fr;
+    gap: 16px;
+    padding: 16px;
+    align-items: start;
+}
+
+.visor { overflow: auto; }
+
+/* ---------- Panel lateral ---------- */
+.panel { display: flex; flex-direction: column; gap: 10px; }
+
+.grupo {
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    background: var(--panel);
+}
+.grupo summary {
+    padding: 9px 12px;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+}
+.grupo-cuerpo, .datos { padding: 4px 12px 12px; }
+.grupo-cuerpo { display: flex; flex-direction: column; gap: 8px; }
+
+button {
+    padding: 7px 10px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    background: var(--panel-2);
+    color: var(--texto);
+    font: inherit;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+}
+button:hover { background: #292d40; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+button.activo { border-color: var(--acento); background: #22304d; }
+#delete-points-mode.activo { border-color: var(--peligro); background: #4a2430; }
+
+input[type="range"] { width: 100%; accent-color: var(--acento); }
+label { color: var(--texto-suave); }
+output { color: var(--texto); font-weight: 600; }
+
+.nota { margin: 0; color: var(--texto-suave); font-size: 12px; }
+
+.atajos { margin: 0; padding-left: 18px; color: var(--texto-suave); font-size: 12px; }
+
+.datos {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    margin: 0;
+}
+.datos dt { color: var(--texto-suave); }
+.datos dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Lienzo + HUD superpuesto ---------- */
+.lienzo {
+    position: relative;
+    width: fit-content;
+    min-width: calc(var(--canvas-ancho, 800px) + 2px);      /* antes de iniciar todavía no hay canvas */
+    min-height: calc(var(--canvas-alto, 600px) + 2px);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    overflow: hidden;
+    line-height: 0;                 /* sin hueco bajo el canvas */
+}
+.lienzo canvas:not(.minimapa) { display: block; }
+
+.hud-chips {
+    position: absolute;
+    top: 8px; left: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: calc(100% - 16px);
+    pointer-events: none;           /* el HUD nunca tapa los clicks del canvas */
+    line-height: 1.3;
+}
+.chip {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(14, 15, 20, .72);
+    backdrop-filter: blur(4px);
+    color: var(--texto-suave);
+    font-size: 12px;
+    white-space: nowrap;
+}
+.chip b { color: var(--texto); font-variant-numeric: tabular-nums; }
+.lienzo[data-modo="juego"] .chip-modo { background: rgba(30, 90, 60, .8); }
+.lienzo[data-modo="juego"] .chip-modo b { color: #c8f5dc; }
+.lienzo[data-modo="borrar"] .chip-modo { background: rgba(120, 30, 45, .8); }
+.lienzo[data-modo="borrar"] .chip-modo b { color: #ffd0d6; }
+
+.minimapa {
+    position: absolute;
+    left: 8px; bottom: 8px;
+    width: 160px; height: 160px;
+    border: 1px solid rgba(255, 255, 255, .25);
+    border-radius: 8px;
+    opacity: .9;
+    cursor: pointer;
+}
+.minimapa:hover { opacity: 1; }
+
+/* ---------- Modos ---------- */
+/* Lo propio del editor se oculta al jugar y viceversa (body[data-modo] lo pone el simulador). */
+body[data-modo="juego"] .solo-editor,
+body:not([data-modo="juego"]) .solo-juego { display: none; }
+
+/* Antes de iniciar y durante la precarga inicial, el panel no hace nada: se atenúa. */
+body[data-estado="inicio"] .panel { opacity: .45; pointer-events: none; }
+
+/* ---------- Pantalla de inicio ---------- */
+.pantalla-inicio {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: grid;
+    place-items: center;
+    line-height: 1.45;
+    background: radial-gradient(ellipse at 50% 40%, rgba(110, 168, 255, .12), transparent 60%), rgba(8, 9, 13, .94);
+}
+.pantalla-inicio[hidden] { display: none; }
+.inicio-caja {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    max-width: 420px;
+    padding: 24px;
+    text-align: center;
+}
+.inicio-caja h2 { margin: 0; font-size: 26px; }
+.inicio-caja p { margin: 0; color: var(--texto-suave); }
+.boton-jugar {
+    min-width: 200px;
+    padding: 12px 28px;
+    border-color: var(--acento);
+    background: #22304d;
+    font-size: 18px;
+    font-weight: 600;
+}
+.boton-jugar:hover { background: #2c3f66; }
+.boton-secundario { color: var(--texto-suave); font-size: 13px; }
+button:disabled { opacity: .55; cursor: progress; }
+.inicio-mensaje { min-height: 1.45em; font-size: 13px; }
+.inicio-caja .atajos { padding-left: 0; list-style: none; }
+
+/* ---------- Pantallas chicas: el panel pasa arriba ---------- */
+@media (max-width: 1150px) {
+    .escritorio { grid-template-columns: 1fr; }
+    .panel { flex-direction: row; flex-wrap: wrap; }
+    .grupo { flex: 1 1 260px; }
+}
+
+/* La resolución interna sigue fija; sólo se escala el lienzo para que quepa en la ventana. */
+.superficie-canvas {
+    position: relative;
+    width: var(--canvas-ancho, 800px);
+    height: var(--canvas-alto, 600px);
+}
+
+.superficie-canvas > canvas:not(.minimapa) {
+    width: 100%;
+    height: 100%;
+}
+
+.menu-pausa,
+.menu-pausa-contenido {
+    display: none;
+}
+
+.submenu-configuraciones {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.submenu-configuraciones[hidden] {
+    display: none;
+}
+
+.submenu-configuraciones h3 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.submenu-configuraciones .grupo-cuerpo label {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    color: var(--texto);
+}
+
+.submenu-configuraciones input[type="checkbox"] {
+    flex: 0 0 auto;
+    margin-top: 4px;
+}
+
+#seccion-editor {
+    display: contents;
+}
+
+#seccion-editor > summary,
+.menu-pausa-contenido > h2,
+.acciones-pausa,
+.mensaje-pausa {
+    display: none;
+}
+
+.ayuda-juego {
+    display: none;
+}
+
+body[data-modo="juego"] {
+    overflow: hidden;
+}
+
+body[data-modo="juego"] .barra-superior {
+    display: none;
+}
+
+body[data-modo="juego"] .escritorio {
+    position: fixed;
+    inset: 0;
+    display: block;
+    padding: 0;
+    overflow: hidden;
+}
+
+body[data-modo="juego"] .visor {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+}
+
+body[data-modo="juego"] .lienzo {
+    display: grid;
+    place-items: center;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    min-width: 0;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+    background: #020202;
+}
+
+body[data-modo="juego"] .superficie-canvas {
+    width: min(100vw, 133.333vh);
+    width: min(100vw, 133.333dvh);
+    height: min(100vh, 75vw);
+    height: min(100dvh, 75vw);
+}
+
+body[data-modo="juego"] .superficie-canvas > canvas:not(.minimapa) {
+    image-rendering: pixelated;
+}
+
+body[data-modo="juego"] .hud-chips .chip:nth-child(n+3) {
+    display: none;
+}
+
+body[data-modo="juego"][data-mostrar-hud-chips="false"] .hud-chips,
+body[data-modo="juego"][data-mostrar-estado-simulador="false"] .estado-juego {
+    display: none;
+}
+
+body[data-modo="juego"] #menu-pausa {
+    display: none;
+}
+
+body[data-modo="juego"][data-pausado="true"] #menu-pausa {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(8, 9, 13, .78);
+    line-height: 1.45;
+}
+
+body[data-modo="juego"][data-pausado="true"] .menu-pausa-contenido {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(520px, 100%);
+    max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 40px);
+    overflow: auto;
+    padding: 22px;
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    background: var(--panel);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, .45);
+}
+
+body[data-modo="juego"][data-pausado="true"] .menu-pausa-contenido > h2 {
+    display: block;
+}
+
+body[data-modo="juego"][data-pausado="true"] .acciones-pausa {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+body[data-modo="juego"][data-pausado="true"] .acciones-pausa button {
+    min-width: 0;
+}
+
+body[data-modo="juego"][data-pausado="true"] .menu-pausa-contenido > h2 {
+    margin: 0;
+    font-size: 22px;
+}
+
+body[data-modo="juego"][data-pausado="true"] .mensaje-pausa:not([hidden]) {
+    display: block;
+    margin: 0;
+    color: var(--peligro);
+}
+
+body[data-modo="juego"] #seccion-editor {
+    display: none;
+}
+
+body[data-modo="juego"] .ayuda-juego {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    display: block;
+    width: min(220px, 38%);
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 10px;
+    background: rgba(14, 15, 20, .78);
+    color: var(--texto);
+    font-size: 12px;
+    line-height: 1.5;
+    pointer-events: none;
+    backdrop-filter: blur(5px);
+}
+
+.estado-juego {
+    display: none;
+}
+
+body[data-modo="editor"] .estado-juego,
+body[data-modo="juego"] .estado-juego {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: min(280px, 42%);
+    max-height: min(70%, 320px);
+    overflow: auto;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 10px;
+    background: rgba(14, 15, 20, .8);
+    color: var(--texto);
+    font-size: 11px;
+    line-height: 1.35;
+    pointer-events: none;
+    backdrop-filter: blur(5px);
+}
+
+.estado-juego .datos {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+    padding: 0;
+}
+
+.estado-juego .datos dt {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.estado-juego .datos dd {
+    font-size: 11px;
+}
+
+.ayuda-juego summary,
+.estado-juego summary {
+    cursor: pointer;
+    font-weight: 600;
+    pointer-events: auto;
+}
+
+.ayuda-juego ul {
+    display: grid;
+    gap: 3px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--texto-suave);
+}
+
+@media (max-width: 520px) {
+    body[data-modo="juego"] .ayuda-juego {
+        width: min(190px, 42%);
+        padding: 7px 9px;
+        font-size: 11px;
+    }
+
+    body[data-modo="juego"] .minimapa {
+        width: 112px;
+        height: 112px;
+    }
+
+    body[data-modo="editor"] .estado-juego,
+    body[data-modo="juego"] .estado-juego {
+        width: min(220px, 46%);
+        padding: 7px 8px;
+        font-size: 10px;
+    }
+
+    .estado-juego .datos dd {
+        font-size: 10px;
+    }
+}
