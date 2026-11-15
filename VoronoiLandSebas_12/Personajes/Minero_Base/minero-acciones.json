@@ -1,0 +1,87 @@
+{
+  "hoja": {
+    "archivo": "minero-spritesheet.png",
+    "ancho": 256,
+    "alto": 96,
+    "anchoCuadro": 32,
+    "altoCuadro": 32,
+    "columnas": 8,
+    "filas": 3,
+    "numeracion": "Base 1, de izquierda a derecha y de arriba abajo",
+    "coordenadas": "Origen x=0, y=0 en la esquina superior izquierda"
+  },
+  "acciones": {
+    "reposo": {
+      "cuadros": [1],
+      "repetir": true
+    },
+    "caminar": {
+      "cuadros": [2, 3, 4, 5],
+      "repetir": true
+    },
+    "saltar": {
+      "cuadros": [6, 7, 8],
+      "fases": ["impulso", "puntoMasAlto", "caida"],
+      "repetir": false
+    },
+    "aterrizar": {
+      "cuadros": [9],
+      "repetir": false
+    },
+    "picarHorizontal": {
+      "cuadros": [10, 11, 12],
+      "fases": ["preparacion", "impacto", "recuperacion"],
+      "direccionBase": "derecha",
+      "repetir": false,
+      "puedeInvertirseHorizontalmente": true
+    },
+    "picarAbajo": {
+      "cuadros": [13, 14, 15],
+      "fases": ["preparacion", "impacto", "recuperacion"],
+      "repetir": false
+    },
+    "picarArriba": {
+      "cuadros": [17, 18, 19],
+      "fases": ["preparacion", "impacto", "recuperacion"],
+      "repetir": false
+    }
+  },
+  "cuadrosAuxiliares": {
+    "16": {
+      "nombre": "reposoDuplicado",
+      "equivaleA": 1
+    },
+    "20": {
+      "nombre": "caminarDuplicado",
+      "equivaleA": 2
+    },
+    "21": {
+      "nombre": "aterrizarDuplicado",
+      "equivaleA": 9
+    }
+  },
+  "espaciosVacios": [22, 23, 24],
+  "cuadros": {
+    "1": {"x": 0, "y": 0, "ancho": 32, "alto": 32, "nombre": "reposo"},
+    "2": {"x": 32, "y": 0, "ancho": 32, "alto": 32, "nombre": "caminar1"},
+    "3": {"x": 64, "y": 0, "ancho": 32, "alto": 32, "nombre": "caminar2"},
+    "4": {"x": 96, "y": 0, "ancho": 32, "alto": 32, "nombre": "caminar3"},
+    "5": {"x": 128, "y": 0, "ancho": 32, "alto": 32, "nombre": "caminar4"},
+    "6": {"x": 160, "y": 0, "ancho": 32, "alto": 32, "nombre": "saltoImpulso"},
+    "7": {"x": 192, "y": 0, "ancho": 32, "alto": 32, "nombre": "saltoPuntoMasAlto"},
+    "8": {"x": 224, "y": 0, "ancho": 32, "alto": 32, "nombre": "saltoCaida"},
+    "9": {"x": 0, "y": 32, "ancho": 32, "alto": 32, "nombre": "aterrizar"},
+    "10": {"x": 32, "y": 32, "ancho": 32, "alto": 32, "nombre": "picarHorizontalPreparacion"},
+    "11": {"x": 64, "y": 32, "ancho": 32, "alto": 32, "nombre": "picarHorizontalImpacto"},
+    "12": {"x": 96, "y": 32, "ancho": 32, "alto": 32, "nombre": "picarHorizontalRecuperacion"},
+    "13": {"x": 128, "y": 32, "ancho": 32, "alto": 32, "nombre": "picarAbajoPreparacion"},
+    "14": {"x": 160, "y": 32, "ancho": 32, "alto": 32, "nombre": "picarAbajoImpacto"},
+    "15": {"x": 192, "y": 32, "ancho": 32, "alto": 32, "nombre": "picarAbajoRecuperacion"},
+    "16": {"x": 224, "y": 32, "ancho": 32, "alto": 32, "nombre": "reposoDuplicado"},
+    "17": {"x": 0, "y": 64, "ancho": 32, "alto": 32, "nombre": "picarArribaPreparacion"},
+    "18": {"x": 32, "y": 64, "ancho": 32, "alto": 32, "nombre": "picarArribaImpacto"},
+    "19": {"x": 64, "y": 64, "ancho": 32, "alto": 32, "nombre": "picarArribaRecuperacion"},
+    "20": {"x": 96, "y": 64, "ancho": 32, "alto": 32, "nombre": "caminarDuplicado"},
+    "21": {"x": 128, "y": 64, "ancho": 32, "alto": 32, "nombre": "aterrizarDuplicado"}
+  }
+}
