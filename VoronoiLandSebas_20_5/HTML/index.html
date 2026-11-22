@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="yo">
+    <meta name="description" content="Página de prueba para uso de html creando diagramas de Voronoi sin delaunay.">
+    <title>VoronoiLand</title>
+
+    <link rel="stylesheet" href="../CSS/styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/8.13.2/pixi.min.js"></script>
+
+    <!-- El orden importa: las clases se definen antes de que SimuladorVoronoi las use. -->
+    <script defer src="../Js/configuracion.js"></script>
+    <script defer src="../Js/funcionesGlobales.js"></script>
+    <script defer src="../Js/definicionesSonido.js"></script>
+    <script defer src="../Js/sintetizadorSonidos.js"></script>
+    <script defer src="../Js/servicioAudio.js"></script>
+    <script defer src="../Js/audioEntorno.js"></script>
+    <script defer src="../Js/gatilloPeriodico.js"></script>
+    <script defer src="../Js/controladorSonidos.js"></script>
+    <script defer src="../Js/textoFPS.js"></script>
+    <script defer src="../Js/camara.js"></script>
+    <script defer src="../Js/mundoCeldas.js"></script>
+    <script defer src="../Js/regionesDelMundo.js"></script>
+    <script defer src="../Js/inicializadorMateriales.js"></script>
+    <script defer src="../Js/simuladorMateriales.js"></script>
+    <script defer src="../Js/mundoVoronoi.js"></script>
+    <script defer src="../Js/rasterizadorVoronoi.js"></script>
+    <script defer src="../Js/jugador.js"></script>
+    <script defer src="../Js/Estado.js"></script>
+    <script defer src="../Js/EstadoReposo.js"></script>
+    <script defer src="../Js/EstadoCorrer.js"></script>
+    <script defer src="../Js/EstadoSaltar.js"></script>
+    <script defer src="../Js/EstadoCaer.js"></script>
+    <script defer src="../Js/EstadoAterrizar.js"></script>
+    <script defer src="../Js/EstadoMirarArriba.js"></script>
+    <script defer src="../Js/EstadoMirarAbajo.js"></script>
+    <script defer src="../Js/EstadoPicar.js"></script>
+    <script defer src="../Js/EstadoPicarArriba.js"></script>
+    <script defer src="../Js/EstadoPicarAbajo.js"></script>
+    <script defer src="../Js/FSM.js"></script>
+    <script defer src="../Js/fisicaJugador.js"></script>
+    <script defer src="../Js/excavador.js"></script>
+    <script defer src="../Js/generadorSpawn.js"></script>
+    <script defer src="../Js/vistaJugador.js"></script>
+    <script defer src="../Js/sesionJuego.js"></script>
+    <script defer src="../Js/entradaUsuario.js"></script>
+    <script defer src="../Js/hud.js"></script>
+    <script defer src="../Js/pantallaInicio.js"></script>
+    <script defer src="../Js/simulador_voronoi.js"></script>
+</head>
+
+<body>
+    <header class="barra-superior">
+        <h1>VoronoiLand</h1>
+        <p class="subtitulo">
+            Mundo de <b id="hud-mundo-titulo">—</b>
+            <abbr title="Cada celda es una unidad lógica del mundo (un píxel de arena a zoom ×1)">celdas</abbr>
+            · cámara de <b id="hud-vista-titulo">—</b>
+        </p>
+    </header>
+
+    <main class="escritorio">
+        <div class="menu-pausa" id="menu-pausa">
+            <div class="menu-pausa-contenido">
+                <h2 id="titulo-pausa">Juego pausado</h2>
+                <div class="acciones-pausa">
+                    <button type="button" id="btn-reanudar">Reanudar</button>
+                    <button type="button" id="btn-reiniciar-mundo">Reiniciar Mundo</button>
+                    <button type="button" id="btn-modo-editor" class="solo-juego">Ir al Modo Editor</button>
+                    <button type="button" id="btn-configuraciones" aria-expanded="false" aria-controls="submenu-configuraciones">Configuraciones</button>
+                    <button type="button" id="btn-glosario" aria-expanded="false" aria-controls="submenu-glosario">Glosario</button>
+                </div>
+                <section id="submenu-configuraciones" class="submenu-configuraciones" aria-labelledby="btn-configuraciones" hidden>
+                    <h3>Configuraciones</h3>
+                    <details class="grupo" open>
+                        <summary>Debugging</summary>
+                        <div class="grupo-cuerpo">
+                            <label><input type="checkbox" id="config-hud-chips" checked> Activar chips del HUD (FPS y Zoom)</label>
+                            <label><input type="checkbox" id="config-estado-simulador" checked> Activar el Benchmark del simulador</label>
+                            <label><input type="checkbox" data-procesamiento-dirty-chunks> Procesamiento por Dirty Chunks Fino</label>
+                        </div>
+                    </details>
+                    <details class="grupo" open>
+                        <summary>Sonido</summary>
+                        <div class="grupo-cuerpo">
+                            <label><input type="checkbox" data-control-sonido checked> Activar efectos <kbd>M</kbd></label>
+                        </div>
+                    </details>
+                    <details class="grupo">
+                        <summary>Ruido Ambiental</summary>
+                        <div class="grupo-cuerpo">
+                            <label for="audio-ambiente-activado"><input type="checkbox" id="audio-ambiente-activado" checked> Activar ambiente del juego</label>
+                            <label for="audio-ambiente-volumen">Volumen ambiental: <output id="audio-ambiente-valor">28%</output></label>
+                            <input type="range" min="0" max="100" value="28" id="audio-ambiente-volumen">
+                        </div>
+                    </details>
+                </section>
+                <section id="submenu-glosario" class="submenu-glosario" aria-labelledby="btn-glosario" hidden>
+                    <h3>Glosario</h3>
+                    <div id="glosario-pausa"></div>
+                </section>
+                <p class="mensaje-pausa" id="mensaje-pausa" role="status" aria-live="polite" hidden></p>
+            </div>
+        </div>
+
+        <details id="seccion-editor" open>
+            <summary>Controles del editor</summary>
+            <aside class="panel" aria-label="Controles del editor">
+                <details class="grupo" open>
+                    <summary>Modo Juego</summary>
+                    <div class="grupo-cuerpo">
+                        <button type="button" id="btn-modo-juego" class="solo-editor">Jugar</button>
+                        <label for="seed-mundo">Seed del mundo</label>
+                        <input type="text" id="seed-mundo" maxlength="64" autocomplete="off" placeholder="Texto o número">
+                        <button type="button" id="btn-aplicar-seed" class="solo-editor">Cargar seed</button>
+                        <p class="nota solo-editor">Seed actual: <b id="seed-editor">—</b></p>
+                    </div>
+                </details>
+
+                <details class="grupo" open>
+                    <summary>Herramientas</summary>
+                    <div class="grupo-cuerpo">
+                        <button type="button" id="delete-points-mode" class="solo-editor" aria-pressed="false">Modo borrador <kbd>B</kbd></button>
+                        <button type="button" id="random-points" class="solo-editor" data-sonido="puntoCreado">Generar puntos random</button>
+                        <button type="button" id="reset-canvas" class="solo-editor" data-sonido="puntoBorrado">Resetear canvas</button>
+
+                        <label for="scaleWall">
+                            Grosor de los muros: <output id="valor-muro">5</output>
+                            <abbr title="Píxeles de pantalla">px</abbr>
+                        </label>
+                        <input type="range" min="5" max="10" value="5" id="scaleWall">
+
+                        <p class="nota solo-editor">
+                            Un punto nuevo no puede quedar a menos de <span id="hud-dist-min">35</span>
+                            <abbr title="Celdas del mundo">celdas</abbr> de otro.
+                        </p>
+                    </div>
+                </details>
+
+                <details class="grupo" open>
+                    <summary>Cámara</summary>
+                    <div class="grupo-cuerpo">
+                        <label for="zoom-slider">Zoom: <output id="valor-zoom">×8</output></label>
+                        <input type="range" min="0" max="8" value="8" step="1" id="zoom-slider">
+                        <button type="button" id="center-camera">Centrar cámara <kbd>0</kbd></button>
+                        <ul class="atajos solo-editor">
+                            <li><kbd>Rueda</kbd> zoom hacia el cursor</li>
+                            <li><kbd>Botón central</kbd> / <kbd>Derecho</kbd> / <kbd>Espacio</kbd>+arrastrar: mover</li>
+                            <li><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>→</kbd>: mover cámara</li>
+                            <li><kbd>+</kbd> <kbd>−</kbd> zoom · <kbd>B</kbd> borrador</li>
+                        </ul>
+                        <ul class="atajos solo-juego">
+                            <li><kbd>Rueda</kbd> / <kbd>+</kbd> <kbd>−</kbd> zoom (×4 a ×8)</li>
+                            <li>La cámara sigue al jugador</li>
+                        </ul>
+                    </div>
+                </details>
+
+                <details class="grupo" open>
+                    <summary>Optimización</summary>
+                    <div class="grupo-cuerpo">
+                        <label><input type="checkbox" data-procesamiento-dirty-chunks> Procesamiento por Dirty Chunks Fino</label>
+                        <p class="nota">Procesa solo las celdas activas dentro de cada bloque.</p>
+                    </div>
+                </details>
+
+                <details class="grupo" open>
+                    <summary>Sonido</summary>
+                    <div class="grupo-cuerpo">
+                        <label><input type="checkbox" data-control-sonido checked> Activar efectos <kbd>M</kbd></label>
+                        <label for="audio-musica-activado"><input type="checkbox" id="audio-musica-activado" checked> Música de inicio y edición</label>
+                        <label for="audio-musica-volumen">Volumen de música: <output id="audio-musica-valor">28%</output></label>
+                        <input type="range" min="0" max="100" value="28" id="audio-musica-volumen">
+                    </div>
+                </details>
+
+                <details class="grupo">
+                    <summary>Glosario</summary>
+                    <div class="grupo-cuerpo" id="glosario-editor"></div>
+                </details>
+            </aside>
+        </details>
+
+        <section class="visor" aria-label="Simulador">
+            <div class="lienzo" id="lienzo" data-modo="dibujar">
+                <div class="superficie-canvas" id="superficie-canvas">
+                    <div class="hud-chips">
+                        <span class="chip"><abbr title="Cuadros por segundo">FPS</abbr> <b id="texto-fps">—</b></span>
+                        <span class="chip">Zoom <b id="hud-zoom">—</b></span>
+                        <span class="chip solo-juego">Seed <b id="hud-seed">—</b></span>
+                        <span class="chip">Cursor <b id="hud-pos">—</b></span>
+                        <span class="chip">Material <b id="text-actual-mat">—</b></span>
+                        <span class="chip chip-modo">Modo <b id="hud-modo">Dibujar</b></span>
+                    </div>
+
+                    <aside class="ayuda-juego" aria-label="Controles del juego">
+                        <details open>
+                            <summary>¿Cómo jugar?</summary>
+                            <ul>
+                                <li><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd>  <kbd>→</kbd> mover</li>
+                                <li><kbd>W</kbd> <kbd>S</kbd> / <kbd>↑</kbd>  <kbd>↓</kbd> mirar</li>
+                                <li><kbd>Espacio</kbd> saltar</li>
+                                <li><kbd>Click</kbd> mantenido: picar hacia el cursor dentro del alcance</li>
+                                <li><kbd>Esc</kbd> pausar</li>
+                            </ul>
+                        </details>
+                    </aside>
+
+                    <aside class="estado-juego" aria-label="Estado del juego" tabindex="0">
+                        <details open>
+                            <summary>Benchmark</summary>
+                            <dl class="datos">
+                                <dt><abbr title="Promedio de CPU por frame en hasta los 120 frames más recientes; vale 0 cuando no se redibuja">Regiones (prom./frame)</abbr></dt>
+                                <dd id="hud-voronoi">—</dd>
+                                <dt><abbr title="Promedio de CPU por frame en hasta los 120 frames más recientes; vale 0 cuando no se redibuja">Composición (prom./frame)</abbr></dt>
+                                <dd id="hud-composicion">—</dd>
+                                <dt><abbr title="Promedio y percentil 95 del intervalo del ticker Pixi en hasta los 120 frames más recientes">Intervalo ticker (prom./P95)</abbr></dt>
+                                <dd id="hud-frame">—</dd>
+                                <dt>Mundo</dt>
+                                <dd id="hud-mundo">—</dd>
+                                <dt>Vista</dt>
+                                <dd id="hud-vista">—</dd>
+                                <dt>Cámara (x, y)</dt>
+                                <dd id="hud-camara">—</dd>
+                                <dt>Puntos usados</dt>
+                                <dd id="text-cant-points">—</dd>
+                                <dt>Celdas con material</dt>
+                                <dd id="hud-celdas">—</dd>
+                                <dt>Jugador (x, y)</dt>
+                                <dd id="hud-jugador">—</dd>
+                                <dt><abbr title="Promedio de CPU por frame en hasta los 120 frames más recientes">Física jugador (prom./frame)</abbr></dt>
+                                <dd id="hud-fisica">—</dd>
+                                <dt><abbr title="Promedio de CPU por frame en hasta los 120 frames más recientes">Simulación (prom./frame)</abbr></dt>
+                                <dd id="hud-simulacion">—</dd>
+                                <dt><abbr title="Bloques de 32×32 celdas procesados en el último frame">Bloques/frame</abbr></dt>
+                                <dd id="hud-bloques">—</dd>
+                            </dl>
+                            <details class="diagnostico-rendimiento">
+                                <summary>Diagnóstico de rendimiento</summary>
+                                <dl class="datos">
+                                    <dt><abbr title="Promedio de CPU ejecutando el bucle del juego en hasta los 120 frames más recientes">CPU del bucle (promedio)</abbr></dt>
+                                    <dd id="hud-frame-promedio">—</dd>
+                                    <dt><abbr title="Percentil 95 de CPU ejecutando el bucle del juego en hasta los 120 frames más recientes">CPU del bucle (P95)</abbr></dt>
+                                    <dd id="hud-frame-p95">—</dd>
+                                    <dt><abbr title="Frames cuyo bucle del juego superó 16,7 ms entre los 120 más recientes como máximo">Bucle &gt; 16,7 ms</abbr></dt>
+                                    <dd id="hud-frames-lentos">—</dd>
+                                    <dt><abbr title="Promedio de CPU por frame en hasta los 120 frames más recientes">Inicialización (prom./frame)</abbr></dt>
+                                    <dd id="hud-inicializacion">—</dd>
+                                    <dt><abbr title="Celdas inicializadas desde la última actualización del HUD">Celdas inicializadas</abbr></dt>
+                                    <dd id="hud-celdas-inicializadas">—</dd>
+                                    <dt><abbr title="Celdas examinadas por el simulador, incluidas las vacías, desde la última actualización del HUD">Celdas visitadas</abbr></dt>
+                                    <dd id="hud-celdas-visitadas">—</dd>
+                                    <dt><abbr title="Celdas con material dinámico examinadas desde la última actualización del HUD">Celdas activas procesadas</abbr></dt>
+                                    <dd id="hud-celdas-activas">—</dd>
+                                    <dt><abbr title="Intercambios de posición de materiales desde la última actualización del HUD">Movimientos de material</abbr></dt>
+                                    <dd id="hud-movimientos">—</dd>
+                                    <dt><abbr title="Cambio neto aproximado de bloques en cola por segundo, en los últimos 2 s">Tendencia de cola</abbr></dt>
+                                    <dd id="hud-tendencia-cola">—</dd>
+                                    <dt><abbr title="Promedio por frame de CPU en BufferImageSource.update() durante hasta los 120 frames más recientes; 0 si no se actualizó la textura">Update de textura (CPU prom./frame)</abbr></dt>
+                                    <dd id="hud-subida-textura">—</dd>
+                                    <dt><abbr title="Frames que redibujaron el mundo entre los 120 más recientes como máximo">Frames con redibujado</abbr></dt>
+                                    <dd id="hud-frames-redibujados">—</dd>
+                                    <dt><abbr title="Tiempo transcurrido desde el último redibujado del mundo">Último redibujado hace</abbr></dt>
+                                    <dd id="hud-ultimo-redibujado">—</dd>
+                                </dl>
+                            </details>
+                        </details>
+                    </aside>
+
+                    <div class="pantalla-inicio" id="pantalla-inicio">
+                        <div class="inicio-caja">
+                            <h2>VoronoiLand</h2>
+                            <p>Un mundo de regiones de Voronoi con arena, piedra, agua y lava. Cavá, explorá y observá sus reacciones.</p>
+                            <p>Hecho por Sebastian Arnez y Carlos Genisetto.</p>
+                            <button type="button" id="btn-jugar" class="boton-jugar">Jugar</button>
+                            <button type="button" id="btn-editor" class="boton-secundario">Abrir el editor</button>
+                            <p class="inicio-mensaje" id="inicio-mensaje"></p>
+                            <ul class="atajos">
+                                <li><kbd>A</kbd> <kbd>D</kbd> / <kbd>←</kbd> <kbd>→</kbd> mover · <kbd>W</kbd> <kbd>S</kbd> / <kbd>↑</kbd> <kbd>↓</kbd>  mirar arriba / abajo</li>
+                                <li><kbd>Espacio</kbd> saltar · <kbd>Click</kbd> mantenido: picar hacia el cursor dentro del alcance</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <canvas id="minimapa" class="minimapa" width="160" height="160" title="Minimapa: click para mover la cámara"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <template id="contenido-glosario">
+        <dl class="glosario-definiciones">
+            <dt>Regiones (prom./frame)</dt>
+            <dd>Promedio de CPU para preparar las regiones de Voronoi, calculado sobre hasta los 120 frames más recientes; cuenta 0 en frames sin redibujado.</dd>
+            <dt>Composición (prom./frame)</dt>
+            <dd>Promedio de CPU para pintar la imagen, calculado sobre hasta los 120 frames más recientes; cuenta 0 en frames sin redibujado.</dd>
+            <dt>Intervalo ticker (prom./P95)</dt>
+            <dd>Promedio y percentil 95 del intervalo informado por el ticker Pixi en hasta los 120 frames más recientes; incluye el tiempo entre callbacks.</dd>
+            <dt>Mundo</dt>
+            <dd>Ancho y alto total del mundo, expresados en celdas.</dd>
+            <dt>Vista</dt>
+            <dd>Porción del mundo que cabe en pantalla, expresada en celdas.</dd>
+            <dt>Cámara (x, y)</dt>
+            <dd>Coordenadas del origen de la cámara dentro del mundo.</dd>
+            <dt>Puntos usados</dt>
+            <dd>Cantidad de semillas de Voronoi actuales sobre el máximo permitido.</dd>
+            <dt>Celdas con material</dt>
+            <dd>Celdas ocupadas por algún material; no significa que todas estén moviéndose.</dd>
+            <dt>Jugador (x, y)</dt>
+            <dd>Posición del centro del jugador en coordenadas del mundo.</dd>
+            <dt>Física jugador (prom./frame)</dt>
+            <dd>Promedio de CPU empleado en la física del jugador por frame durante hasta los 120 frames más recientes.</dd>
+            <dt>Simulación (prom./frame)</dt>
+            <dd>Promedio de CPU empleado en actualizar materiales por frame durante hasta los 120 frames más recientes.</dd>
+            <dt>Bloques/frame</dt>
+            <dd>Bloques de 32×32 celdas procesados en el cuadro y bloques pendientes en cola.</dd>
+            <dt>CPU del bucle (promedio)</dt>
+            <dd>Promedio de CPU que tarda la función principal del juego en hasta los 120 frames más recientes; no incluye el tiempo entre callbacks del ticker.</dd>
+            <dt>CPU del bucle (P95)</dt>
+            <dd>El 95 % de las ejecuciones del bucle del juego tardó este tiempo o menos, dentro de los 120 frames más recientes como máximo.</dd>
+            <dt>Bucle &gt; 16,7 ms</dt>
+            <dd>Cuántas ejecuciones del bucle superaron 16,7 ms entre los 120 frames más recientes como máximo.</dd>
+            <dt>Inicialización (prom./frame)</dt>
+            <dd>Promedio por frame de CPU usado para inicializar celdas durante hasta los 120 frames más recientes.</dd>
+            <dt>Celdas inicializadas</dt>
+            <dd>Celdas cuyo estado o región se preparó desde la última actualización del HUD.</dd>
+            <dt>Celdas visitadas</dt>
+            <dd>Celdas examinadas por la simulación, incluidas las vacías.</dd>
+            <dt>Celdas activas procesadas</dt>
+            <dd>Celdas con materiales dinámicos que la simulación examinó en la última ventana del HUD.</dd>
+            <dt>Movimientos de material</dt>
+            <dd>Intercambios de posición realizados por arena, piedra, tierra, agua, lava o vapor.</dd>
+            <dt>Tendencia de cola</dt>
+            <dd>Cambio aproximado de bloques pendientes por segundo durante los últimos dos segundos.</dd>
+            <dt>Update de textura (CPU prom./frame)</dt>
+            <dd>Promedio por frame de CPU empleado en la llamada que actualiza la textura, calculado sobre hasta los 120 frames más recientes; cuenta 0 cuando no se actualiza y no mide el trabajo interno de la GPU.</dd>
+            <dt>Frames con redibujado</dt>
+            <dd>Cuántos de los 120 frames más recientes como máximo redibujaron el mundo.</dd>
+            <dt>Último redibujado hace</dt>
+            <dd>Tiempo transcurrido desde que el rasterizador volvió a dibujar el mundo.</dd>
+        </dl>
+    </template>
+
+    <script>
+        // El simulador recién se crea al elegir un modo en la pantalla de inicio (botón "Jugar").
+        window.addEventListener('DOMContentLoaded', () => {
+            // Los navegadores no dejan reproducir sonido hasta que el usuario hace algo: el audio se desbloquea
+            // con el primer click o tecla (por eso se crea acá, antes que el simulador, y se le pasa).
+            const sonidos = new ControladorSonidos(new ServicioAudio(CONFIG.audio), CONFIG.audio);
+            sonidos.conectarDOM();
+
+            new PantallaInicio(async (modo) => {
+                window.simulador = new SimuladorVoronoi(sonidos);
+                await window.simulador.listo;
+                await window.simulador.cambiarModo(modo);
+            });
+        });
+    </script>
+</body>
+
+</html>
