@@ -2,7 +2,7 @@
 // La FSM selecciona el clip; esta clase reproduce sus cuadros y resuelve la colocación visual.
 class VistaJugador {
     static async cargarRecursos() {
-        const urlAtlas = new URL("Personajes/Nuevo_Minero/jugador_atlas.json", document.baseURI);
+        const urlAtlas = new URL("./Personajes/Nuevo_Minero/jugador_atlas.json", document.baseURI);
         const respuesta = await fetch(urlAtlas);
         if (!respuesta.ok) {
             throw new Error(`No se pudo cargar el atlas del jugador: ${respuesta.status} ${respuesta.statusText}`);
